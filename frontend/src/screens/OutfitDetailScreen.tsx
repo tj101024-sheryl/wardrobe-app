@@ -26,7 +26,8 @@ import {
   fullUrl,
 } from "../types";
 import { longDate, relativeDate, ymd } from "../date";
-import { ItemThumb, LookThumb } from "../components/ItemThumb";
+import { ItemThumb } from "../components/ItemThumb";
+import { OutfitPreview } from "../components/OutfitCanvas";
 import CommentsModal from "../components/CommentsModal";
 import ShareSheet from "../components/ShareSheet";
 import { PHONE_MAX_WIDTH } from "../components/PhoneFrame";
@@ -216,7 +217,7 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
         </TouchableOpacity>
 
         <View style={styles.hero}>
-          <LookThumb outfit={outfit} size={heroSize} />
+          <OutfitPreview outfit={outfit} size={heroSize} />
         </View>
 
       <View style={styles.titleRow}>

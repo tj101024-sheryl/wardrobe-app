@@ -228,6 +228,7 @@ class OutfitOut(BaseModel):
     occasion: str
     weather: dict | None = None
     layout_mode: str
+    canvas_data: dict = Field(default_factory=dict)
     visibility: str
     makeup_visibility: str = "public"
     photo_url: str | None = None

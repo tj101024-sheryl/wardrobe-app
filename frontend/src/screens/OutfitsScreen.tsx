@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { http } from "../api";
+import { getWithCache } from "../cache";
 import {
   CATEGORY_LABEL,
   Outfit,
@@ -32,7 +33,7 @@ import {
   relativeDate,
   shortDate,
 } from "../date";
-import { LookThumb, OutfitMosaic } from "../components/ItemThumb";
+import { OutfitPreview } from "../components/OutfitCanvas";
 import { PHONE_MAX_WIDTH } from "../components/PhoneFrame";
 import { syncOutfitReminders } from "../notifications";
 import { colors, radius, shadow, type } from "../theme";
@@ -46,6 +47,7 @@ export default function OutfitsScreen() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [offline, setOffline] = useState(false);
 
   const { width } = useWindowDimensions();
   const frame = Math.min(width, PHONE_MAX_WIDTH);
@@ -59,13 +61,17 @@ export default function OutfitsScreen() {
       const from = ymd(days[0]);
       const to = ymd(days[6]);
       const [t, w, r] = await Promise.all([
-        http.get<OutfitToday>("/api/outfits/today"),
-        http.get<Outfit[]>(`/api/outfits?from=${from}&to=${to}`),
-        http.get<Outfit[]>("/api/outfits?limit=20"),
+        getWithCache<OutfitToday>("outfits:today", "/api/outfits/today"),
+        getWithCache<Outfit[]>(
+          `outfits:week:${from}:${to}`,
+          `/api/outfits?from=${from}&to=${to}`
+        ),
+        getWithCache<Outfit[]>("outfits:recent", "/api/outfits?limit=20"),
       ]);
-      setToday(t);
-      setWeek(w);
-      setRecent(r);
+      setToday(t.data);
+      setWeek(w.data);
+      setRecent(r.data);
+      setOffline(t.stale || w.stale || r.stale);
       void syncOutfitReminders().catch(() => {
         // 沒有通知權限或 Web 版時忽略；設定頁會提示
       });
@@ -186,6 +192,14 @@ export default function OutfitsScreen() {
         </View>
       ) : null}
 
+      {offline ? (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineText}>
+            目前顯示離線快取，恢復連線後下拉重新整理即可更新
+          </Text>
+        </View>
+      ) : null}
+
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={colors.text} />
       ) : (
@@ -272,7 +286,7 @@ export default function OutfitsScreen() {
                             }
                             activeOpacity={0.85}
                           >
-                            <OutfitMosaic outfit={current} size={92} />
+                            <OutfitPreview outfit={current} size={92} />
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={styles.photoChip}
@@ -597,7 +611,7 @@ export default function OutfitsScreen() {
                   onPress={() => router.push(`/outfit/${outfit.id}`)}
                   activeOpacity={0.88}
                 >
-                  <LookThumb outfit={outfit} size={cardW} />
+                  <OutfitPreview outfit={outfit} size={cardW} />
                   <Text style={styles.cardTitle} numberOfLines={1}>
                     {outfit.title || relativeDate(outfit.date)}
                   </Text>
@@ -1112,4 +1126,13 @@ const styles = StyleSheet.create({
   },
   errorText: { color: colors.danger, flex: 1, fontSize: 13 },
   retry: { color: colors.text, fontWeight: "700", fontSize: 13 },
+  offlineBanner: {
+    marginHorizontal: 18,
+    marginTop: 8,
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  offlineText: { fontSize: 10, color: "#6f5a12", lineHeight: 15 },
 });

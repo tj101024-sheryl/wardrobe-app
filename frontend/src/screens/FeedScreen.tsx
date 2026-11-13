@@ -13,6 +13,7 @@ import {
 import { router, useFocusEffect } from "expo-router";
 import { Compass, Heart, MessageCircle, Send } from "lucide-react-native";
 import { http } from "../api";
+import { getWithCache } from "../cache";
 import {
   FeedResult,
   LikeResult,
@@ -20,7 +21,7 @@ import {
   outfitRecorded,
 } from "../types";
 import { relativeDate } from "../date";
-import { LookThumb } from "../components/ItemThumb";
+import { OutfitPreview } from "../components/OutfitCanvas";
 import CommentsModal from "../components/CommentsModal";
 import ShareSheet from "../components/ShareSheet";
 import { PHONE_MAX_WIDTH } from "../components/PhoneFrame";
@@ -86,7 +87,7 @@ function FeedCard({
       <TouchableOpacity onPress={onOpen} activeOpacity={0.9}>
         <View style={styles.photoWrap}>
           {outfitRecorded(outfit) ? (
-            <LookThumb outfit={outfit} size={imageSize} />
+            <OutfitPreview outfit={outfit} size={imageSize} />
           ) : (
             <View
               style={[
@@ -164,6 +165,7 @@ export default function FeedScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [offline, setOffline] = useState(false);
   const [commentTarget, setCommentTarget] = useState<number | null>(null);
   const [shareTarget, setShareTarget] = useState<number | null>(null);
 
@@ -174,13 +176,16 @@ export default function FeedScreen() {
   const loadFirst = useCallback(async () => {
     try {
       setError("");
-      const data = await http.get<FeedResult>(
+      const result = await getWithCache<FeedResult>(
+        `feed:${scope}`,
         `/api/feed?scope=${scope}&limit=${PAGE_SIZE}`
       );
-      setItems(data.items);
-      setNextCursor(data.next_cursor);
+      setItems(result.data.items);
+      setNextCursor(result.data.next_cursor);
+      setOffline(result.stale);
     } catch (e: any) {
       setError(e.message || "載入動態失敗");
+      setOffline(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -220,6 +225,7 @@ export default function FeedScreen() {
     setNextCursor(null);
     setLoading(true);
     setError("");
+    setOffline(false);
   }
 
   async function toggleLike(outfit: Outfit) {
@@ -311,6 +317,14 @@ export default function FeedScreen() {
             );
           })}
         </View>
+
+        {offline ? (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineText}>
+              目前顯示離線快取，恢復連線後重新整理即可更新
+            </Text>
+          </View>
+        ) : null}
 
         {error ? (
           <View style={styles.errorBox}>
@@ -460,6 +474,14 @@ const styles = StyleSheet.create({
   },
   segmentText: { fontSize: 12, fontWeight: "700", color: colors.sub },
   segmentTextActive: { color: "#fff" },
+  offlineBanner: {
+    marginBottom: 12,
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  offlineText: { fontSize: 10, color: "#6f5a12", lineHeight: 15 },
   errorBox: {
     marginBottom: 12,
     padding: 12,

@@ -17,7 +17,8 @@ import {
   colorGroupOf,
   colorLabel,
 } from "../color";
-import { ItemThumb, LookThumb } from "../components/ItemThumb";
+import { ItemThumb } from "../components/ItemThumb";
+import { OutfitPreview } from "../components/OutfitCanvas";
 import ColorWheel from "../components/ColorWheel";
 import { PHONE_MAX_WIDTH } from "../components/PhoneFrame";
 import { colors, radius, shadow, type } from "../theme";
@@ -297,7 +298,7 @@ export default function ColorWallScreen() {
                   onPress={() => router.push(`/outfit/${outfit.id}`)}
                   activeOpacity={0.88}
                 >
-                  <LookThumb outfit={outfit} size={outfitW} />
+                  <OutfitPreview outfit={outfit} size={outfitW} />
                   <Text style={styles.itemName} numberOfLines={1}>
                     {outfit.title || relativeLabel(outfit.date)}
                   </Text>

@@ -18,6 +18,7 @@ import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { http } from "../api";
 import {
   CATEGORY_LABEL,
+  CanvasTransform,
   Item,
   OCCASIONS,
   Outfit,
@@ -35,6 +36,11 @@ import {
   ymd,
 } from "../date";
 import { ItemThumb } from "../components/ItemThumb";
+import {
+  OutfitCanvas,
+  defaultTransform,
+  transformsFromOutfit,
+} from "../components/OutfitCanvas";
 import { PHONE_MAX_WIDTH } from "../components/PhoneFrame";
 import { syncOutfitReminders } from "../notifications";
 import { colors, radius, shadow, type } from "../theme";
@@ -112,6 +118,24 @@ function PhotoCard({
   );
 }
 
+function CanvasToolButton({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={styles.toolButton}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      <Text style={styles.toolButtonText}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function OutfitEditorScreen() {
   const params = useLocalSearchParams<{ date?: string; id?: string }>();
   const editId = params.id ? Number(params.id) : null;
@@ -130,6 +154,11 @@ export default function OutfitEditorScreen() {
   const [productIds, setProductIds] = useState<number[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [roleFilter, setRoleFilter] = useState("all");
+  const [canvasMode, setCanvasMode] = useState(false);
+  const [canvasTransforms, setCanvasTransforms] = useState<
+    Record<number, CanvasTransform>
+  >({});
+  const [canvasSelected, setCanvasSelected] = useState<number | null>(null);
 
   const [outfitPhotoLocal, setOutfitPhotoLocal] = useState<string | null>(null);
   const [outfitPhotoUrl, setOutfitPhotoUrl] = useState<string | null>(null);
@@ -160,6 +189,9 @@ export default function OutfitEditorScreen() {
         setMakeupVisibility(outfit.makeup_visibility || "public");
         setSelected(outfit.items.map((row) => row.item_id));
         setProductIds(outfit.products.map((row) => row.item_id));
+        setCanvasMode(outfit.layout_mode === "canvas");
+        setCanvasTransforms(transformsFromOutfit(outfit));
+        setCanvasSelected(outfit.items[0]?.item_id ?? null);
         setOutfitPhotoUrl(outfit.photo_url);
         setMakeupPhotoUrl(outfit.makeup_photo_url);
         setOutfitPhotoLocal(null);
@@ -215,6 +247,17 @@ export default function OutfitEditorScreen() {
     .map((id) => byId.get(id))
     .filter((i): i is Item => !!i);
 
+  const canvasSize = Math.min(frame - 36, 380);
+  const selectedItems = useMemo(
+    () =>
+      selected
+        .map((id) => byId.get(id))
+        .filter((i): i is Item => !!i),
+    [selected, byId]
+  );
+  const canvasItem =
+    canvasSelected != null ? byId.get(canvasSelected) ?? null : null;
+
   const outfitPreview = outfitPhotoLocal
     ? outfitPhotoLocal
     : !outfitPhotoRemoved && outfitPhotoUrl
@@ -230,9 +273,117 @@ export default function OutfitEditorScreen() {
   const isFuture = dateStr > ymd(new Date());
 
   function toggle(id: number) {
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    const exists = selected.includes(id);
+    if (exists) {
+      setSelected(selected.filter((x) => x !== id));
+      if (canvasSelected === id) setCanvasSelected(null);
+      return;
+    }
+    setSelected([...selected, id]);
+    if (canvasMode) {
+      const item = byId.get(id);
+      if (item) {
+        setCanvasTransforms((prev) =>
+          prev[id]
+            ? prev
+            : {
+                ...prev,
+                [id]: defaultTransform(
+                  item,
+                  selected.length,
+                  selected.length + 1
+                ),
+              }
+        );
+        setCanvasSelected(id);
+      }
+    }
+  }
+
+  function switchCanvasMode(on: boolean) {
+    setCanvasMode(on);
+    if (!on) return;
+    setCanvasTransforms((prev) => {
+      const next = { ...prev };
+      selected.forEach((id, index) => {
+        if (!next[id]) {
+          const item = byId.get(id);
+          if (item) {
+            next[id] = defaultTransform(item, index, selected.length);
+          }
+        }
+      });
+      return next;
+    });
+    if (canvasSelected == null && selected.length > 0) {
+      setCanvasSelected(selected[0]);
+    }
+  }
+
+  function updateCanvasTransform(
+    itemId: number,
+    patch: Partial<CanvasTransform>
+  ) {
+    setCanvasTransforms((prev) => {
+      let current = prev[itemId];
+      if (!current) {
+        const item = byId.get(itemId);
+        if (!item) return prev;
+        current = defaultTransform(
+          item,
+          selected.indexOf(itemId),
+          selected.length
+        );
+      }
+      return { ...prev, [itemId]: { ...current, ...patch } };
+    });
+  }
+
+  function nudgeScale(delta: number) {
+    if (canvasSelected == null) return;
+    const tf = canvasTransforms[canvasSelected];
+    if (!tf) return;
+    updateCanvasTransform(canvasSelected, {
+      scale: Math.max(0.35, Math.min(2.2, tf.scale + delta)),
+    });
+  }
+
+  function nudgeRotation(delta: number) {
+    if (canvasSelected == null) return;
+    const tf = canvasTransforms[canvasSelected];
+    if (!tf) return;
+    updateCanvasTransform(canvasSelected, {
+      rotation: tf.rotation + delta,
+    });
+  }
+
+  function layerCanvasItem(direction: "up" | "down") {
+    if (canvasSelected == null) return;
+    const values = selected
+      .map((id) => canvasTransforms[id]?.z_index)
+      .filter((z): z is number => typeof z === "number");
+    const target =
+      direction === "up"
+        ? Math.max(0, ...values) + 1
+        : Math.min(0, ...values) - 1;
+    updateCanvasTransform(canvasSelected, { z_index: target });
+  }
+
+  function resetCanvasItem() {
+    if (canvasSelected == null) return;
+    const item = byId.get(canvasSelected);
+    if (!item) return;
+    updateCanvasTransform(
+      canvasSelected,
+      defaultTransform(item, selected.indexOf(canvasSelected), selected.length)
     );
+  }
+
+  function removeCanvasItem() {
+    if (canvasSelected == null) return;
+    const id = canvasSelected;
+    setSelected(selected.filter((x) => x !== id));
+    setCanvasSelected(null);
   }
 
   function toggleProduct(id: number) {
@@ -336,12 +487,26 @@ export default function OutfitEditorScreen() {
         occasion,
         visibility,
         makeup_visibility: makeupVisibility,
-        layout_mode: "list",
-        items: selected.map((id) => {
+        layout_mode: canvasMode ? "canvas" : "list",
+        canvas_data: canvasMode ? { background: "paper" } : {},
+        items: selected.map((id, index) => {
           const item = byId.get(id);
-          return {
+          const base = {
             item_id: id,
             role: item ? outfitRoleOf(item) : "",
+          };
+          if (!canvasMode) return base;
+          const tf =
+            canvasTransforms[id] ??
+            (item ? defaultTransform(item, index, selected.length) : null);
+          if (!tf) return base;
+          return {
+            ...base,
+            x: tf.x,
+            y: tf.y,
+            scale: tf.scale,
+            rotation: tf.rotation,
+            z_index: tf.z_index,
           };
         }),
         product_ids: productIds,
@@ -451,6 +616,101 @@ export default function OutfitEditorScreen() {
             onRemove={() => removePhoto("makeup")}
           />
         </View>
+
+        <Text style={styles.sectionTitle}>排版模式</Text>
+        <Text style={styles.sectionHint}>
+          快速列表最省事；想做成拼貼就用畫布，拖曳喜歡的位置
+        </Text>
+        <View style={styles.modeTabs}>
+          {[
+            { key: false, label: "快速列表" },
+            { key: true, label: "畫布拼貼" },
+          ].map((tab) => {
+            const active = canvasMode === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.label}
+                style={[styles.modeTab, active && styles.modeTabActive]}
+                onPress={() => switchCanvasMode(tab.key)}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[styles.modeText, active && styles.modeTextActive]}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {canvasMode ? (
+          selectedItems.length === 0 ? (
+            <View style={styles.canvasEmpty}>
+              <Text style={styles.canvasEmptyEmoji}>🎨</Text>
+              <Text style={styles.canvasEmptyText}>
+                先從下面的單品挑幾件{"\n"}畫布會自動幫你排好位置
+              </Text>
+            </View>
+          ) : (
+            <>
+              <OutfitCanvas
+                items={selectedItems}
+                transforms={canvasTransforms}
+                size={canvasSize}
+                editable
+                selectedId={canvasSelected}
+                onSelect={setCanvasSelected}
+                onTransform={updateCanvasTransform}
+              />
+              <Text style={styles.canvasHint}>
+                直接拖曳單品移動；點選後可用下方按鈕縮放、旋轉與調整圖層
+              </Text>
+              {canvasItem ? (
+                <View style={styles.canvasTools}>
+                  <View style={styles.canvasToolHead}>
+                    <Text style={styles.canvasToolName} numberOfLines={1}>
+                      {canvasItem.name || "未命名單品"}
+                    </Text>
+                    <Text style={styles.canvasToolMeta}>已選取</Text>
+                  </View>
+                  <View style={styles.toolRow}>
+                    <CanvasToolButton
+                      label="縮小"
+                      onPress={() => nudgeScale(-0.1)}
+                    />
+                    <CanvasToolButton
+                      label="放大"
+                      onPress={() => nudgeScale(0.1)}
+                    />
+                    <CanvasToolButton
+                      label="左轉"
+                      onPress={() => nudgeRotation(-15)}
+                    />
+                    <CanvasToolButton
+                      label="右轉"
+                      onPress={() => nudgeRotation(15)}
+                    />
+                    <CanvasToolButton
+                      label="上層"
+                      onPress={() => layerCanvasItem("up")}
+                    />
+                    <CanvasToolButton
+                      label="下層"
+                      onPress={() => layerCanvasItem("down")}
+                    />
+                    <CanvasToolButton label="重設" onPress={resetCanvasItem} />
+                    <CanvasToolButton label="移除" onPress={removeCanvasItem} />
+                  </View>
+                </View>
+              ) : (
+                <Text style={styles.canvasHint}>
+                  點一下畫布上的單品，就能調整大小、角度與圖層
+                </Text>
+              )}
+            </>
+          )
+        ) : null}
 
         <Text style={styles.sectionTitle}>穿搭</Text>
         <Text style={styles.sectionHint}>
@@ -910,6 +1170,74 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   photoBtnText: { fontSize: 10, color: colors.sub, fontWeight: "600" },
+  modeTabs: {
+    flexDirection: "row",
+    backgroundColor: colors.chip,
+    borderRadius: radius.full,
+    padding: 3,
+    marginBottom: 10,
+  },
+  modeTab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 8,
+    borderRadius: radius.full,
+  },
+  modeTabActive: { backgroundColor: colors.primary },
+  modeText: { fontSize: 12, fontWeight: "700", color: colors.sub },
+  modeTextActive: { color: "#fff" },
+  canvasEmpty: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: "dashed",
+    paddingVertical: 34,
+    alignItems: "center",
+  },
+  canvasEmptyEmoji: { fontSize: 32 },
+  canvasEmptyText: {
+    fontSize: 11,
+    color: colors.sub,
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 17,
+  },
+  canvasHint: {
+    fontSize: 10,
+    color: colors.faint,
+    lineHeight: 15,
+    marginTop: 7,
+  },
+  canvasTools: {
+    marginTop: 9,
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 10,
+  },
+  canvasToolHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  canvasToolName: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  canvasToolMeta: { fontSize: 9, color: colors.faint },
+  toolRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  toolButton: {
+    backgroundColor: colors.chip,
+    borderRadius: radius.full,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  toolButtonText: { fontSize: 10, fontWeight: "700", color: colors.text },
   selectedScroll: { marginBottom: 4 },
   selectedRow: { gap: 8 },
   selectedItem: { position: "relative" },

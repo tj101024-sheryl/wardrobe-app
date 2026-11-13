@@ -18,7 +18,7 @@ import {
   outfitRecorded,
 } from "../types";
 import { relativeDate } from "../date";
-import { LookThumb } from "../components/ItemThumb";
+import { OutfitPreview } from "../components/OutfitCanvas";
 import { PHONE_MAX_WIDTH } from "../components/PhoneFrame";
 import { colors, radius, shadow, type } from "../theme";
 
@@ -48,7 +48,7 @@ function OutfitCard({
     >
       <View style={styles.thumbWrap}>
         {outfitRecorded(outfit) ? (
-          <LookThumb outfit={outfit} size={width} />
+          <OutfitPreview outfit={outfit} size={width} />
         ) : (
           <View style={[styles.emptyThumb, { width, height: width }]}>
             <Text style={{ fontSize: 32 }}>👗</Text>

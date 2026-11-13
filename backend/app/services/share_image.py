@@ -70,6 +70,41 @@ def _paste_contain(
         canvas.paste(fitted, (x, y))
 
 
+def _render_canvas(
+    canvas: Image.Image, outfit: Outfit, box: tuple[int, int, int, int]
+) -> bool:
+    left, top, right, bottom = box
+    width = max(1, right - left)
+    height = max(1, bottom - top)
+    base = min(width, height) * 0.42
+    placed = False
+    ordered = sorted(outfit.items, key=lambda row: (row.z_index, row.id))
+    for row in ordered:
+        image = _load_image(row.item.cutout_path or row.item.image_path)
+        if image is None:
+            continue
+        target = max(24, int(base * max(0.2, row.scale or 1)))
+        fitted = ImageOps.contain(image, (target, target))
+        if abs(row.rotation or 0) > 0.1:
+            fitted = fitted.rotate(
+                -(row.rotation or 0),
+                expand=True,
+                resample=Image.Resampling.BICUBIC,
+            )
+        cx = left + width * (row.x if row.x else 0.5)
+        cy = top + height * (row.y if row.y else 0.5)
+        canvas.paste(
+            fitted,
+            (
+                int(cx - fitted.width / 2),
+                int(cy - fitted.height / 2),
+            ),
+            fitted,
+        )
+        placed = True
+    return placed
+
+
 def generate_share_image(
     outfit: Outfit, fmt: str, include_makeup: bool = True
 ) -> Path:
@@ -116,6 +151,7 @@ def generate_share_image(
         (item, _load_image(item.cutout_path or item.image_path))
         for item in items[:6]
     ]
+    drawn_canvas = False
 
     if photo is not None:
         card = Image.new("RGB", (content_right - content_left, content_height), CARD)
@@ -125,7 +161,14 @@ def generate_share_image(
             (0, 0, content_right - content_left, content_height),
         )
         canvas.paste(card, (content_left, content_top))
-    else:
+    elif outfit.layout_mode == "canvas":
+        drawn_canvas = _render_canvas(
+            canvas,
+            outfit,
+            (content_left, content_top, content_right, content_bottom),
+        )
+
+    if photo is None and not drawn_canvas:
         cols = 3 if fmt != "fb" else 4
         rows = 2 if fmt != "fb" else 1
         gap = 14

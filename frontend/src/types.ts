@@ -146,6 +146,14 @@ export type OutfitProduct = {
   item: Item;
 };
 
+export type CanvasTransform = {
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  z_index: number;
+};
+
 export type Outfit = {
   id: number;
   title: string;
@@ -155,6 +163,7 @@ export type Outfit = {
   occasion: string;
   weather: Record<string, unknown> | null;
   layout_mode: string;
+  canvas_data: Record<string, unknown>;
   visibility: OutfitVisibility;
   makeup_visibility: OutfitVisibility;
   photo_url: string | null;
