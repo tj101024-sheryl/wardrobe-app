@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   Pressable,
   ActivityIndicator,
   Platform,
+  Image,
+  ScrollView,
 } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
@@ -33,7 +35,37 @@ export default function ShareSheet({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
+  const [preview, setPreview] = useState("");
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!visible || !outfitId) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingPreview(true);
+      setError("");
+      try {
+        const [image, text] = await Promise.all([
+          http.get<{ url: string }>(
+            `/api/outfits/${outfitId}/share-image?format=feed`
+          ),
+          http.get<{ text: string }>(`/api/outfits/${outfitId}/share-text`),
+        ]);
+        if (!cancelled) {
+          setPreview(image.url);
+          setCaption(text.text);
+        }
+      } catch {
+        // 預覽失敗不阻擋後續分享
+      } finally {
+        if (!cancelled) setLoadingPreview(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, outfitId]);
 
   async function share(format: string) {
     if (!outfitId) return;
@@ -44,11 +76,10 @@ export default function ShareSheet({
         http.get<{ url: string }>(
           `/api/outfits/${outfitId}/share-image?format=${format}`
         ),
-        http.get<{ text: string }>(
-          `/api/outfits/${outfitId}/share-text`
-        ),
+        http.get<{ text: string }>(`/api/outfits/${outfitId}/share-text`),
       ]);
       setCaption(text.text);
+      setPreview(image.url);
       const url = fullUrl(image.url);
 
       if (Platform.OS === "web") {
@@ -84,10 +115,28 @@ export default function ShareSheet({
     >
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.card} onPress={() => {}}>
+          <ScrollView showsVerticalScrollIndicator={false}>
           <Text style={styles.title}>分享這套穿搭</Text>
           <Text style={styles.sub}>
             選擇尺寸後會開啟系統分享面板，可選 IG 或 Facebook
           </Text>
+          {preview ? (
+            <View style={styles.previewWrap}>
+              <Image
+                source={{ uri: fullUrl(preview) }}
+                style={styles.preview}
+                resizeMode="cover"
+              />
+              <View style={styles.previewBadge}>
+                <Text style={styles.previewBadgeText}>預覽</Text>
+              </View>
+            </View>
+          ) : loadingPreview ? (
+            <View style={styles.previewLoading}>
+              <ActivityIndicator color={colors.sub} size="small" />
+              <Text style={styles.previewLoadingText}>產生分享圖…</Text>
+            </View>
+          ) : null}
           {FORMATS.map((item) => (
             <TouchableOpacity
               key={item.key}
@@ -119,6 +168,7 @@ export default function ShareSheet({
           <TouchableOpacity style={styles.close} onPress={onClose}>
             <Text style={styles.closeText}>關閉</Text>
           </TouchableOpacity>
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -143,8 +193,38 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     padding: 18,
+    maxHeight: "86%",
     ...shadow.raised,
   },
+  previewWrap: {
+    borderRadius: radius.md,
+    overflow: "hidden",
+    backgroundColor: colors.bg,
+    marginBottom: 12,
+    aspectRatio: 4 / 5,
+    maxHeight: 200,
+  },
+  preview: { width: "100%", height: "100%" },
+  previewBadge: {
+    position: "absolute",
+    left: 8,
+    top: 8,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  previewBadgeText: { color: "#fff", fontSize: 9, fontWeight: "700" },
+  previewLoading: {
+    height: 86,
+    borderRadius: radius.md,
+    backgroundColor: colors.bg,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginBottom: 12,
+  },
+  previewLoadingText: { fontSize: 9, color: colors.faint },
   title: { ...type.heading, color: colors.text },
   sub: {
     fontSize: 10,
