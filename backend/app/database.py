@@ -89,6 +89,14 @@ def _migrate():
             cur.execute(
                 "ALTER TABLE outfits ADD COLUMN occasion VARCHAR(50) DEFAULT ''"
             )
+        if "audience" not in ocols:
+            cur.execute(
+                "ALTER TABLE outfits ADD COLUMN audience VARCHAR(20) DEFAULT 'unisex'"
+            )
+        cur.execute(
+            "UPDATE outfits SET audience='unisex' "
+            "WHERE audience IS NULL OR audience=''"
+        )
         if "weather" not in ocols:
             cur.execute(
                 "ALTER TABLE outfits ADD COLUMN weather JSON DEFAULT '{}'"

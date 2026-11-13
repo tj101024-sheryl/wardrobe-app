@@ -127,6 +127,7 @@ export type ScrapeResult = {
 
 export type OutfitStatus = "draft" | "scheduled" | "worn" | "canceled";
 export type OutfitVisibility = "public" | "followers" | "private";
+export type OutfitAudience = "male" | "female" | "unisex";
 
 export type OutfitItem = {
   id: number;
@@ -161,6 +162,7 @@ export type Outfit = {
   status: OutfitStatus;
   notes: string;
   occasion: string;
+  audience: OutfitAudience;
   weather: Record<string, unknown> | null;
   layout_mode: string;
   canvas_data: Record<string, unknown>;
@@ -267,6 +269,18 @@ export const VISIBILITY_LABEL: Record<string, string> = {
   public: "公開",
   followers: "追蹤者",
   private: "私人",
+};
+
+export const AUDIENCE_LABEL: Record<string, string> = {
+  male: "男生向",
+  female: "女生向",
+  unisex: "中性",
+};
+
+export const AUDIENCE_SHORT_LABEL: Record<string, string> = {
+  male: "男生",
+  female: "女生",
+  unisex: "中性",
 };
 
 export function outfitRecorded(outfit: Outfit): boolean {

@@ -17,6 +17,7 @@ import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { http } from "../api";
 import {
+  AUDIENCE_SHORT_LABEL,
   CATEGORY_LABEL,
   CanvasTransform,
   Item,
@@ -148,6 +149,7 @@ export default function OutfitEditorScreen() {
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [occasion, setOccasion] = useState("");
+  const [audience, setAudience] = useState("unisex");
   const [visibility, setVisibility] = useState("public");
   const [makeupVisibility, setMakeupVisibility] = useState("public");
   const [selected, setSelected] = useState<number[]>([]);
@@ -185,6 +187,7 @@ export default function OutfitEditorScreen() {
         setTitle(outfit.title);
         setNotes(outfit.notes);
         setOccasion(outfit.occasion);
+        setAudience(outfit.audience || "unisex");
         setVisibility(outfit.visibility);
         setMakeupVisibility(outfit.makeup_visibility || "public");
         setSelected(outfit.items.map((row) => row.item_id));
@@ -485,6 +488,7 @@ export default function OutfitEditorScreen() {
         date: dateStr,
         notes,
         occasion,
+        audience,
         visibility,
         makeup_visibility: makeupVisibility,
         layout_mode: canvasMode ? "canvas" : "list",
@@ -905,6 +909,30 @@ export default function OutfitEditorScreen() {
                   style={[styles.chipText, active && styles.chipTextActive]}
                 >
                   {o}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={styles.label}>內容取向</Text>
+        <Text style={styles.privacyHint}>
+          公開後會出現在對應的探索分類；不確定就選中性。
+        </Text>
+        <View style={styles.wrapRow}>
+          {(["male", "female", "unisex"] as const).map((v) => {
+            const active = audience === v;
+            return (
+              <TouchableOpacity
+                key={v}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => setAudience(v)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[styles.chipText, active && styles.chipTextActive]}
+                >
+                  {AUDIENCE_SHORT_LABEL[v]}
                 </Text>
               </TouchableOpacity>
             );

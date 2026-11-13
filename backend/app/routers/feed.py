@@ -14,6 +14,7 @@ router = APIRouter(prefix="/feed", tags=["feed"])
 @router.get("", response_model=FeedOut)
 def get_feed(
     scope: str = Query("discover", pattern="^(discover|following)$"),
+    audience: str = Query("all", pattern="^(all|male|female|unisex)$"),
     cursor: int | None = None,
     limit: int = Query(12, ge=1, le=50),
     user: User = Depends(get_current_user),
@@ -44,6 +45,9 @@ def get_feed(
         )
     else:
         query = query.filter(Outfit.visibility == "public")
+
+    if audience != "all":
+        query = query.filter(Outfit.audience == audience)
 
     if cursor:
         query = query.filter(Outfit.id < cursor)

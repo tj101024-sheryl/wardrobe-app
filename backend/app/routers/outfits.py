@@ -46,6 +46,7 @@ from .items import item_to_out
 router = APIRouter(prefix="/outfits", tags=["outfits"])
 
 VISIBILITIES = {"public", "followers", "private"}
+AUDIENCES = {"male", "female", "unisex"}
 
 
 def _clean_photo(value: str | None) -> str | None:
@@ -118,6 +119,7 @@ def _to_out(outfit: Outfit, viewer: User | None = None) -> OutfitOut:
     out = OutfitOut.model_validate(outfit)
     out.owner = UserBrief.model_validate(outfit.owner)
     out.weather = outfit.weather or {}
+    out.audience = outfit.audience or "unisex"
     out.makeup_visibility = outfit.makeup_visibility or "public"
     out.photo_url = _photo_url(outfit.photo_path)
     out.makeup_photo_url = _photo_url(outfit.makeup_photo_path)
@@ -309,6 +311,7 @@ def create_outfit(
         if data.makeup_visibility in VISIBILITIES
         else "public"
     )
+    audience = data.audience if data.audience in AUDIENCES else "unisex"
     status = "scheduled" if day > _today() else "draft"
     outfit = Outfit(
         user_id=user.id,
@@ -316,6 +319,7 @@ def create_outfit(
         date=day,
         notes=data.notes,
         occasion=data.occasion,
+        audience=audience,
         visibility=visibility,
         makeup_visibility=makeup_visibility,
         photo_path=_clean_photo(data.photo_path),
@@ -545,6 +549,8 @@ def update_outfit(
     for key in ("visibility", "makeup_visibility"):
         if key in payload and payload[key] not in VISIBILITIES:
             raise HTTPException(400, "隱私設定不正確")
+    if "audience" in payload and payload["audience"] not in AUDIENCES:
+        raise HTTPException(400, "內容取向不正確")
 
     for key in ("photo_path", "makeup_photo_path"):
         if key in payload:

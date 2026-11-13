@@ -15,6 +15,7 @@ import { router, useFocusEffect } from "expo-router";
 import { Heart, MessageCircle, Send } from "lucide-react-native";
 import { http } from "../api";
 import {
+  AUDIENCE_LABEL,
   CATEGORY_LABEL,
   LikeResult,
   Outfit,
@@ -232,6 +233,9 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
               ? ` · ${outfit.products.length} 樣`
               : ""}
             {outfit.occasion ? ` · ${outfit.occasion}` : ""}
+            {outfit.audience
+              ? ` · ${AUDIENCE_LABEL[outfit.audience] ?? outfit.audience}`
+              : ""}
           </Text>
         </View>
         <View
@@ -431,6 +435,12 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
           <Text style={styles.metaValue}>
             {VISIBILITY_LABEL[outfit.makeup_visibility] ??
               outfit.makeup_visibility}
+          </Text>
+        </View>
+        <View style={styles.metaRow}>
+          <Text style={styles.metaKey}>內容取向</Text>
+          <Text style={styles.metaValue}>
+            {AUDIENCE_LABEL[outfit.audience] ?? "中性"}
           </Text>
         </View>
         <View style={styles.metaRow}>

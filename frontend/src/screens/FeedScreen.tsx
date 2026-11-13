@@ -15,9 +15,11 @@ import { Compass, Heart, MessageCircle, Send } from "lucide-react-native";
 import { http } from "../api";
 import { getWithCache } from "../cache";
 import {
+  AUDIENCE_SHORT_LABEL,
   FeedResult,
   LikeResult,
   Outfit,
+  OutfitAudience,
   outfitRecorded,
 } from "../types";
 import { relativeDate } from "../date";
@@ -28,7 +30,15 @@ import { PHONE_MAX_WIDTH } from "../components/PhoneFrame";
 import { colors, radius, shadow, type } from "../theme";
 
 type Scope = "discover" | "following";
+type AudienceFilter = "all" | OutfitAudience;
 const PAGE_SIZE = 10;
+
+const AUDIENCE_TABS: { key: AudienceFilter; label: string }[] = [
+  { key: "all", label: "全部" },
+  { key: "male", label: "男生" },
+  { key: "female", label: "女生" },
+  { key: "unisex", label: "中性" },
+];
 
 function FeedCard({
   outfit,
@@ -51,6 +61,7 @@ function FeedCard({
   const meta = [
     relativeDate(outfit.date),
     outfit.occasion,
+    AUDIENCE_SHORT_LABEL[outfit.audience] ?? "",
     outfit.items.length > 0 ? `${outfit.items.length} 件` : "",
     outfit.products.length > 0 ? `${outfit.products.length} 樣` : "",
   ]
@@ -159,6 +170,7 @@ function FeedCard({
 
 export default function FeedScreen() {
   const [scope, setScope] = useState<Scope>("discover");
+  const [audience, setAudience] = useState<AudienceFilter>("all");
   const [items, setItems] = useState<Outfit[]>([]);
   const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -177,8 +189,8 @@ export default function FeedScreen() {
     try {
       setError("");
       const result = await getWithCache<FeedResult>(
-        `feed:${scope}`,
-        `/api/feed?scope=${scope}&limit=${PAGE_SIZE}`
+        `feed:${scope}:${audience}`,
+        `/api/feed?scope=${scope}&audience=${audience}&limit=${PAGE_SIZE}`
       );
       setItems(result.data.items);
       setNextCursor(result.data.next_cursor);
@@ -190,7 +202,7 @@ export default function FeedScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [scope]);
+  }, [scope, audience]);
 
   useFocusEffect(
     useCallback(() => {
@@ -204,7 +216,7 @@ export default function FeedScreen() {
     setLoadingMore(true);
     try {
       const data = await http.get<FeedResult>(
-        `/api/feed?scope=${scope}&limit=${PAGE_SIZE}&cursor=${nextCursor}`
+        `/api/feed?scope=${scope}&audience=${audience}&limit=${PAGE_SIZE}&cursor=${nextCursor}`
       );
       setItems((prev) => {
         const known = new Set(prev.map((o) => o.id));
@@ -221,6 +233,16 @@ export default function FeedScreen() {
   function switchScope(next: Scope) {
     if (next === scope) return;
     setScope(next);
+    setItems([]);
+    setNextCursor(null);
+    setLoading(true);
+    setError("");
+    setOffline(false);
+  }
+
+  function switchAudience(next: AudienceFilter) {
+    if (next === audience) return;
+    setAudience(next);
     setItems([]);
     setNextCursor(null);
     setLoading(true);
@@ -318,6 +340,33 @@ export default function FeedScreen() {
           })}
         </View>
 
+        <View style={styles.audienceRow}>
+          <Text style={styles.audienceLabel}>取向</Text>
+          {AUDIENCE_TABS.map((tab) => {
+            const active = audience === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[
+                  styles.audienceChip,
+                  active && styles.audienceChipActive,
+                ]}
+                onPress={() => switchAudience(tab.key)}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.audienceText,
+                    active && styles.audienceTextActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         {offline ? (
           <View style={styles.offlineBanner}>
             <Text style={styles.offlineText}>
@@ -349,18 +398,24 @@ export default function FeedScreen() {
         <ActivityIndicator color={colors.text} style={{ marginTop: 48 }} />
       );
     }
+    const audienceWord =
+      audience === "all" ? "" : `${AUDIENCE_SHORT_LABEL[audience]} `;
     return (
       <View style={styles.empty}>
         <Text style={styles.emptyIcon}>
           {scope === "following" ? "👀" : "🌍"}
         </Text>
         <Text style={styles.emptyTitle}>
-          {scope === "following" ? "追蹤的人還沒有動態" : "還沒有公開穿搭"}
+          {scope === "following"
+            ? "追蹤的人還沒有動態"
+            : `還沒有${audienceWord}公開穿搭`}
         </Text>
         <Text style={styles.emptyText}>
           {scope === "following"
             ? "去探索看看吧，追蹤喜歡的人就會出現在這裡"
-            : "把穿搭隱私設為公開，就會出現在大家的動態牆"}
+            : audience === "all"
+            ? "把穿搭隱私設為公開，就會出現在大家的動態牆"
+            : "試試切換其他取向，或把穿搭設為公開"}
         </Text>
       </View>
     );
@@ -474,6 +529,33 @@ const styles = StyleSheet.create({
   },
   segmentText: { fontSize: 12, fontWeight: "700", color: colors.sub },
   segmentTextActive: { color: "#fff" },
+  audienceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: -4,
+    marginBottom: 14,
+  },
+  audienceLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.faint,
+    marginRight: 2,
+  },
+  audienceChip: {
+    borderRadius: radius.full,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  audienceChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  audienceText: { fontSize: 10, fontWeight: "700", color: colors.sub },
+  audienceTextActive: { color: "#fff" },
   offlineBanner: {
     marginBottom: 12,
     backgroundColor: colors.accentSoft,
