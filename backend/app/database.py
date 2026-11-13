@@ -146,6 +146,11 @@ def _migrate():
             "WHERE notify_time IS NULL OR notify_time=''"
         )
 
+        cur.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_likes_user_outfit "
+            "ON likes(user_id, outfit_id)"
+        )
+
         # 舊資料搬移：衣服下的鞋子/包包/配件 → 配件大分類（重複執行無害）
         cur.execute(
             "UPDATE items SET item_type='accessories' "

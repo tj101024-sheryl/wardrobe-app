@@ -3,16 +3,28 @@ from calendar import monthrange
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, object_session
 
 from ..auth import get_current_user
 from ..config import UPLOAD_DIR
 from ..database import get_db
-from ..models import Item, Outfit, OutfitItem, OutfitProduct, User, WearLog
+from ..models import (
+    Comment,
+    Item,
+    Like,
+    Outfit,
+    OutfitItem,
+    OutfitProduct,
+    User,
+    WearLog,
+)
 from ..schemas import (
     AutoComposeIn,
     AutoComposeOut,
     AutoOutfitOut,
+    CommentIn,
+    CommentOut,
+    LikeOut,
     OutfitCalendarDay,
     OutfitCreate,
     OutfitOut,
@@ -21,10 +33,13 @@ from ..schemas import (
     OutfitWearIn,
     OutfitWearOut,
     RecommendationGroupsOut,
+    UserBrief,
     WeatherOut,
     WeatherRecommendOut,
 )
 from ..services.recommend import auto_compose, recommendation_groups
+from ..services.share_image import generate_share_image, share_text
+from ..services.social import can_view_makeup, can_view_outfit
 from ..services.weather import fetch_weather, manual_weather
 from .items import item_to_out
 
@@ -71,6 +86,7 @@ def _owned(db: Session, user: User, outfit_id: int) -> Outfit:
     outfit = (
         db.query(Outfit)
         .options(
+            joinedload(Outfit.owner),
             joinedload(Outfit.items).joinedload(OutfitItem.item),
             joinedload(Outfit.products).joinedload(OutfitProduct.item),
         )
@@ -82,8 +98,25 @@ def _owned(db: Session, user: User, outfit_id: int) -> Outfit:
     return outfit
 
 
-def _to_out(outfit: Outfit) -> OutfitOut:
+def _visible(db: Session, user: User, outfit_id: int) -> Outfit:
+    outfit = (
+        db.query(Outfit)
+        .options(
+            joinedload(Outfit.owner),
+            joinedload(Outfit.items).joinedload(OutfitItem.item),
+            joinedload(Outfit.products).joinedload(OutfitProduct.item),
+        )
+        .filter(Outfit.id == outfit_id)
+        .first()
+    )
+    if not outfit or not can_view_outfit(db, outfit, user):
+        raise HTTPException(404, "找不到這套穿搭")
+    return outfit
+
+
+def _to_out(outfit: Outfit, viewer: User | None = None) -> OutfitOut:
     out = OutfitOut.model_validate(outfit)
+    out.owner = UserBrief.model_validate(outfit.owner)
     out.weather = outfit.weather or {}
     out.makeup_visibility = outfit.makeup_visibility or "public"
     out.photo_url = _photo_url(outfit.photo_path)
@@ -94,6 +127,18 @@ def _to_out(outfit: Outfit) -> OutfitOut:
         row_out.item = item_to_out(row.item)
     out.like_count = len(outfit.likes)
     out.comment_count = len(outfit.comments)
+    if viewer is not None:
+        out.liked_by_me = any(
+            like.user_id == viewer.id for like in outfit.likes
+        )
+        out.is_owner = outfit.user_id == viewer.id
+        session = object_session(outfit)
+        if session is not None and not can_view_makeup(
+            session, outfit, viewer
+        ):
+            out.products = []
+            out.makeup_photo_url = None
+            out.makeup_hidden = True
     return out
 
 
@@ -101,6 +146,7 @@ def _base_query(db: Session, user: User):
     return (
         db.query(Outfit)
         .options(
+            joinedload(Outfit.owner),
             joinedload(Outfit.items).joinedload(OutfitItem.item),
             joinedload(Outfit.products).joinedload(OutfitProduct.item),
         )
@@ -180,7 +226,7 @@ def list_outfits(
         .limit(limit)
         .all()
     )
-    return [_to_out(o) for o in rows]
+    return [_to_out(o, user) for o in rows]
 
 
 @router.get("/today", response_model=OutfitTodayOut)
@@ -203,8 +249,8 @@ def today_outfit(
     )
     return OutfitTodayOut(
         date=today,
-        outfit=_to_out(outfit) if outfit else None,
-        pending=[_to_out(o) for o in pending],
+        outfit=_to_out(outfit, user) if outfit else None,
+        pending=[_to_out(o, user) for o in pending],
     )
 
 
@@ -220,7 +266,7 @@ def pending_outfits(
         .order_by(Outfit.date.asc())
         .all()
     )
-    return [_to_out(o) for o in rows]
+    return [_to_out(o, user) for o in rows]
 
 
 @router.get("/calendar", response_model=list[OutfitCalendarDay])
@@ -284,7 +330,7 @@ def create_outfit(
     _sync_items(db, user, outfit, data.items)
     _sync_products(db, user, outfit, data.product_ids)
     db.commit()
-    return _to_out(_owned(db, user, outfit.id))
+    return _to_out(_owned(db, user, outfit.id), user)
 
 
 def _candidate_items(db: Session, user: User) -> list[Item]:
@@ -371,7 +417,111 @@ def get_outfit(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return _to_out(_owned(db, user, outfit_id))
+    return _to_out(_visible(db, user, outfit_id), user)
+
+
+@router.post("/{outfit_id}/like", response_model=LikeOut)
+def like_outfit(
+    outfit_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    outfit = _visible(db, user, outfit_id)
+    existing = (
+        db.query(Like)
+        .filter(Like.user_id == user.id, Like.outfit_id == outfit.id)
+        .first()
+    )
+    if not existing:
+        db.add(Like(user_id=user.id, outfit_id=outfit.id))
+        db.commit()
+    count = db.query(Like).filter(Like.outfit_id == outfit.id).count()
+    return LikeOut(liked=True, like_count=count)
+
+
+@router.delete("/{outfit_id}/like", response_model=LikeOut)
+def unlike_outfit(
+    outfit_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    outfit = _visible(db, user, outfit_id)
+    db.query(Like).filter(
+        Like.user_id == user.id, Like.outfit_id == outfit.id
+    ).delete(synchronize_session=False)
+    db.commit()
+    count = db.query(Like).filter(Like.outfit_id == outfit.id).count()
+    return LikeOut(liked=False, like_count=count)
+
+
+@router.get("/{outfit_id}/comments", response_model=list[CommentOut])
+def list_comments(
+    outfit_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    outfit = _visible(db, user, outfit_id)
+    return (
+        db.query(Comment)
+        .options(joinedload(Comment.user))
+        .filter(Comment.outfit_id == outfit.id)
+        .order_by(Comment.created_at.asc())
+        .all()
+    )
+
+
+@router.post("/{outfit_id}/comments", response_model=CommentOut)
+def create_comment(
+    outfit_id: int,
+    data: CommentIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    outfit = _visible(db, user, outfit_id)
+    body = data.body.strip()
+    if not body:
+        raise HTTPException(400, "留言不能是空的")
+    comment = Comment(
+        user_id=user.id, outfit_id=outfit.id, body=body
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return comment
+
+
+@router.get("/{outfit_id}/share-image")
+def share_image(
+    outfit_id: int,
+    format: str = "feed",
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if format not in ("story", "feed", "fb"):
+        raise HTTPException(400, "不支援的分享尺寸")
+    outfit = _visible(db, user, outfit_id)
+    try:
+        path = generate_share_image(
+            outfit, format, can_view_makeup(db, outfit, user)
+        )
+    except Exception:
+        raise HTTPException(500, "分享圖片產生失敗")
+    return {
+        "url": f"/files/shares/{path.name}",
+        "format": format,
+        "width": 1080 if format != "fb" else 1200,
+        "height": 1920 if format == "story" else 1350 if format == "feed" else 630,
+    }
+
+
+@router.get("/{outfit_id}/share-text")
+def get_share_text(
+    outfit_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    outfit = _visible(db, user, outfit_id)
+    return {"text": share_text(outfit)}
 
 
 @router.patch("/{outfit_id}", response_model=OutfitOut)
@@ -411,7 +561,7 @@ def update_outfit(
     if product_ids is not None:
         _sync_products(db, user, outfit, data.product_ids or [])
     db.commit()
-    return _to_out(_owned(db, user, outfit.id))
+    return _to_out(_owned(db, user, outfit.id), user)
 
 
 @router.delete("/{outfit_id}")
@@ -485,7 +635,7 @@ def wear_outfit(
     outfit.date = worn_on
     db.commit()
     return OutfitWearOut(
-        outfit=_to_out(_owned(db, user, outfit.id)),
+        outfit=_to_out(_owned(db, user, outfit.id), user),
         counted_items=counted,
         skipped_already_counted=skipped,
     )
@@ -527,4 +677,4 @@ def undo_wear(
         db.delete(log)
     outfit.status = "scheduled" if outfit.date > _today() else "draft"
     db.commit()
-    return _to_out(_owned(db, user, outfit.id))
+    return _to_out(_owned(db, user, outfit.id), user)

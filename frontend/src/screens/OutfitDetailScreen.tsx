@@ -12,9 +12,11 @@ import {
   Image,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
+import { Heart, MessageCircle, Send } from "lucide-react-native";
 import { http } from "../api";
 import {
   CATEGORY_LABEL,
+  LikeResult,
   Outfit,
   outfitBadge,
   outfitCountable,
@@ -25,6 +27,8 @@ import {
 } from "../types";
 import { longDate, relativeDate, ymd } from "../date";
 import { ItemThumb, LookThumb } from "../components/ItemThumb";
+import CommentsModal from "../components/CommentsModal";
+import ShareSheet from "../components/ShareSheet";
 import { PHONE_MAX_WIDTH } from "../components/PhoneFrame";
 import { syncOutfitReminders } from "../notifications";
 import { colors, radius, shadow, type } from "../theme";
@@ -48,6 +52,8 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [commentOpen, setCommentOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const { width } = useWindowDimensions();
   const frame = Math.min(width, PHONE_MAX_WIDTH);
   const heroSize = Math.min(frame - 36, 260);
@@ -124,6 +130,42 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
     });
   }
 
+  async function toggleLike() {
+    if (!outfit) return;
+    const liked = !outfit.liked_by_me;
+    setOutfit({
+      ...outfit,
+      liked_by_me: liked,
+      like_count: Math.max(0, outfit.like_count + (liked ? 1 : -1)),
+    });
+    try {
+      const res = liked
+        ? await http.post<LikeResult>(`/api/outfits/${outfit.id}/like`)
+        : await http.del<LikeResult>(`/api/outfits/${outfit.id}/like`);
+      setOutfit((prev) =>
+        prev
+          ? {
+              ...prev,
+              liked_by_me: res.liked,
+              like_count: res.like_count,
+            }
+          : prev
+      );
+    } catch (e: any) {
+      setError(e.message || "按讚失敗");
+      await load();
+    }
+  }
+
+  const handleCommentCount = useCallback(
+    (id: number, count: number) => {
+      setOutfit((prev) =>
+        prev && prev.id === id ? { ...prev, comment_count: count } : prev
+      );
+    },
+    []
+  );
+
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: "center" }]}>
@@ -142,17 +184,40 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
 
   const isFuture = outfit.date > today;
   const canComplete =
-    outfit.status !== "worn" && !isFuture && outfitCountable(outfit);
+    outfit.is_owner &&
+    outfit.status !== "worn" &&
+    !isFuture &&
+    outfitCountable(outfit);
   const hasMakeup = outfit.products.length > 0 || !!outfit.makeup_photo_url;
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={{ padding: 18, paddingBottom: 48 }}
-    >
-      <View style={styles.hero}>
-        <LookThumb outfit={outfit} size={heroSize} />
-      </View>
+    <>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ padding: 18, paddingBottom: 48 }}
+      >
+        <TouchableOpacity
+          style={styles.ownerRow}
+          onPress={() => router.push(`/user/${outfit.owner.id}`)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.ownerAvatar}>
+            <Text style={styles.ownerAvatarText}>
+              {outfit.owner.username.slice(0, 1).toUpperCase()}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.ownerName}>{outfit.owner.username}</Text>
+            <Text style={styles.ownerMeta}>
+              {outfit.is_owner ? "你的穿搭" : `@${outfit.owner.username}`}
+            </Text>
+          </View>
+          <Text style={styles.ownerArrow}>›</Text>
+        </TouchableOpacity>
+
+        <View style={styles.hero}>
+          <LookThumb outfit={outfit} size={heroSize} />
+        </View>
 
       <View style={styles.titleRow}>
         <View style={{ flex: 1 }}>
@@ -186,6 +251,52 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
         </View>
       </View>
 
+      <View style={styles.socialRow}>
+        <TouchableOpacity
+          style={styles.socialBtn}
+          onPress={() => void toggleLike()}
+          activeOpacity={0.75}
+        >
+          <Heart
+            size={18}
+            color={outfit.liked_by_me ? colors.danger : colors.sub}
+            fill={outfit.liked_by_me ? colors.danger : "transparent"}
+            strokeWidth={2}
+          />
+          <Text
+            style={[
+              styles.socialText,
+              outfit.liked_by_me && styles.socialTextActive,
+            ]}
+          >
+            {outfit.like_count > 0 ? outfit.like_count : "讚"}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.socialBtn}
+          onPress={() => setCommentOpen(true)}
+          activeOpacity={0.75}
+        >
+          <MessageCircle size={18} color={colors.sub} strokeWidth={2} />
+          <Text style={styles.socialText}>
+            {outfit.comment_count > 0 ? outfit.comment_count : "留言"}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.socialBtn}
+          onPress={() => setShareOpen(true)}
+          activeOpacity={0.75}
+        >
+          <Send size={17} color={colors.sub} strokeWidth={2} />
+          <Text style={styles.socialText}>分享</Text>
+        </TouchableOpacity>
+        {!outfit.is_owner ? (
+          <View style={styles.visitorTag}>
+            <Text style={styles.visitorTagText}>訪客視角</Text>
+          </View>
+        ) : null}
+      </View>
+
       {notice ? (
         <View style={styles.notice}>
           <Text style={styles.noticeText}>{notice}</Text>
@@ -193,7 +304,7 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
       ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      {isFuture ? (
+      {outfit.is_owner && isFuture ? (
         <View style={styles.infoBanner}>
           <Text style={styles.infoText}>
             這是預定 Look。到 {relativeDate(outfit.date)} 當天才會提醒你確認，
@@ -210,7 +321,12 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
               <TouchableOpacity
                 key={row.id}
                 style={styles.itemRow}
-                onPress={() => router.push(`/item/${row.item.id}`)}
+                onPress={
+                  outfit.is_owner
+                    ? () => router.push(`/item/${row.item.id}`)
+                    : undefined
+                }
+                disabled={!outfit.is_owner}
                 activeOpacity={0.8}
               >
                 <ItemThumb item={row.item} size={48} />
@@ -226,9 +342,24 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
                       : ""}
                   </Text>
                 </View>
-                <Text style={styles.itemArrow}>›</Text>
+                {outfit.is_owner ? (
+                  <Text style={styles.itemArrow}>›</Text>
+                ) : null}
               </TouchableOpacity>
             ))}
+          </View>
+        </>
+      ) : null}
+
+      {outfit.makeup_hidden ? (
+        <>
+          <Text style={styles.sectionTitle}>這天的妝容</Text>
+          <View style={styles.lockedCard}>
+            <Text style={styles.lockedIcon}>🔒</Text>
+            <Text style={styles.lockedTitle}>妝容未公開</Text>
+            <Text style={styles.lockedText}>
+              對方只公開了穿搭，妝容維持私人或僅限追蹤者
+            </Text>
           </View>
         </>
       ) : null}
@@ -249,7 +380,12 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
                 <TouchableOpacity
                   key={row.id}
                   style={styles.itemRow}
-                  onPress={() => router.push(`/item/${row.item.id}`)}
+                  onPress={
+                    outfit.is_owner
+                      ? () => router.push(`/item/${row.item.id}`)
+                      : undefined
+                  }
+                  disabled={!outfit.is_owner}
                   activeOpacity={0.8}
                 >
                   <ItemThumb item={row.item} size={44} />
@@ -264,7 +400,9 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
                         : ""}
                     </Text>
                   </View>
-                  <Text style={styles.itemArrow}>›</Text>
+                  {outfit.is_owner ? (
+                    <Text style={styles.itemArrow}>›</Text>
+                  ) : null}
                 </TouchableOpacity>
               ))}
             </View>
@@ -279,6 +417,7 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
         </View>
       ) : null}
 
+      {outfit.is_owner ? (
       <View style={styles.metaCard}>
         <View style={styles.metaRow}>
           <Text style={styles.metaKey}>穿搭隱私</Text>
@@ -300,6 +439,7 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
           </Text>
         </View>
       </View>
+      ) : null}
 
       {canComplete ? (
         <TouchableOpacity
@@ -316,7 +456,7 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
         </TouchableOpacity>
       ) : null}
 
-      {outfit.status === "worn" ? (
+      {outfit.is_owner && outfit.status === "worn" ? (
         <TouchableOpacity
           style={[styles.ghostBtn, busy && { opacity: 0.6 }]}
           onPress={undo}
@@ -327,25 +467,105 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
         </TouchableOpacity>
       ) : null}
 
-      <TouchableOpacity
-        style={styles.ghostBtn}
-        onPress={() =>
-          router.push(`/outfit/edit?id=${outfit.id}&date=${outfit.date}`)
-        }
-        activeOpacity={0.85}
-      >
-        <Text style={styles.ghostText}>編輯這天</Text>
-      </TouchableOpacity>
+      {outfit.is_owner ? (
+        <>
+          <TouchableOpacity
+            style={styles.ghostBtn}
+            onPress={() =>
+              router.push(`/outfit/edit?id=${outfit.id}&date=${outfit.date}`)
+            }
+            activeOpacity={0.85}
+          >
+            <Text style={styles.ghostText}>編輯這天</Text>
+          </TouchableOpacity>
 
-      <TouchableOpacity style={styles.deleteBtn} onPress={remove}>
-        <Text style={styles.deleteText}>刪除這天</Text>
-      </TouchableOpacity>
-    </ScrollView>
+          <TouchableOpacity style={styles.deleteBtn} onPress={remove}>
+            <Text style={styles.deleteText}>刪除這天</Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
+      </ScrollView>
+      <CommentsModal
+        outfitId={outfit.id}
+        visible={commentOpen}
+        onClose={() => setCommentOpen(false)}
+        onCountChange={handleCommentCount}
+      />
+      <ShareSheet
+        outfitId={outfit.id}
+        visible={shareOpen}
+        onClose={() => setShareOpen(false)}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
+  ownerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    marginBottom: 14,
+  },
+  ownerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ownerAvatarText: { fontSize: 14, fontWeight: "800", color: colors.text },
+  ownerName: { fontSize: 13, fontWeight: "700", color: colors.text },
+  ownerMeta: { fontSize: 10, color: colors.sub, marginTop: 2 },
+  ownerArrow: { fontSize: 20, color: colors.faint },
+  socialRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 14,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.divider,
+  },
+  socialBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginRight: 22,
+  },
+  socialText: { fontSize: 11, color: colors.sub, fontWeight: "600" },
+  socialTextActive: { color: colors.danger },
+  visitorTag: {
+    marginLeft: "auto",
+    borderRadius: radius.full,
+    backgroundColor: colors.chip,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  visitorTagText: { fontSize: 9, fontWeight: "700", color: colors.sub },
+  lockedCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    padding: 22,
+    alignItems: "center",
+    ...shadow.soft,
+  },
+  lockedIcon: { fontSize: 26 },
+  lockedTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.text,
+    marginTop: 8,
+  },
+  lockedText: {
+    fontSize: 11,
+    color: colors.sub,
+    marginTop: 5,
+    textAlign: "center",
+    lineHeight: 17,
+  },
   hero: { alignItems: "center" },
   titleRow: {
     flexDirection: "row",

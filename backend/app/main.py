@@ -9,6 +9,7 @@ from .routers import (
     categories,
     cutout,
     explore,
+    feed,
     items,
     outfits,
     scrape,
@@ -46,6 +47,7 @@ app.include_router(users.router, prefix="/api")
 app.include_router(uploads.router, prefix="/api")
 app.include_router(explore.router, prefix="/api")
 app.include_router(weather.router, prefix="/api")
+app.include_router(feed.router, prefix="/api")
 app.include_router(scrape.router, prefix="/api")
 app.include_router(cutout.router, prefix="/api")
 

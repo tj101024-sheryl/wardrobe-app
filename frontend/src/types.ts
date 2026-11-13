@@ -65,6 +65,53 @@ export type User = {
   created_at: string;
 };
 
+export type UserBrief = {
+  id: number;
+  username: string;
+};
+
+export type FeedResult = {
+  items: Outfit[];
+  next_cursor: number | null;
+};
+
+export type LikeResult = {
+  liked: boolean;
+  like_count: number;
+};
+
+export type FollowResult = {
+  following: boolean;
+  follower_count: number;
+};
+
+export type ShareImageResult = {
+  url: string;
+  format: "story" | "feed" | "fb";
+  width: number;
+  height: number;
+};
+
+export type OutfitComment = {
+  id: number;
+  body: string;
+  created_at: string;
+  user: UserBrief;
+};
+
+export type UserProfile = {
+  id: number;
+  username: string;
+  bio: string;
+  created_at: string;
+  outfit_count: number;
+  follower_count: number;
+  following_count: number;
+  is_following: boolean;
+  is_me: boolean;
+  outfits: Outfit[];
+};
+
 export type ScrapeImage = {
   url: string;
   width: number | null;
@@ -116,6 +163,10 @@ export type Outfit = {
   created_at: string;
   items: OutfitItem[];
   products: OutfitProduct[];
+  owner: UserBrief;
+  liked_by_me: boolean;
+  is_owner: boolean;
+  makeup_hidden: boolean;
   like_count: number;
   comment_count: number;
 };

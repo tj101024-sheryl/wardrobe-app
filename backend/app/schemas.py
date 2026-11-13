@@ -236,6 +236,10 @@ class OutfitOut(BaseModel):
     created_at: datetime
     items: list[OutfitItemOut]
     products: list[OutfitProductOut] = Field(default_factory=list)
+    owner: UserBrief
+    liked_by_me: bool = False
+    is_owner: bool = False
+    makeup_hidden: bool = False
     like_count: int = 0
     comment_count: int = 0
 
@@ -350,6 +354,47 @@ class AutoOutfitOut(BaseModel):
 class AutoComposeOut(BaseModel):
     weather: WeatherOut
     outfits: list[AutoOutfitOut]
+
+
+class LikeOut(BaseModel):
+    liked: bool
+    like_count: int
+
+
+class CommentIn(BaseModel):
+    body: str = Field(min_length=1, max_length=500)
+
+
+class CommentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    body: str
+    created_at: datetime
+    user: UserBrief
+
+
+class FollowOut(BaseModel):
+    following: bool
+    follower_count: int
+
+
+class FeedOut(BaseModel):
+    items: list[OutfitOut]
+    next_cursor: int | None = None
+
+
+class UserProfileOut(BaseModel):
+    id: int
+    username: str
+    bio: str
+    created_at: datetime
+    outfit_count: int
+    follower_count: int
+    following_count: int
+    is_following: bool
+    is_me: bool
+    outfits: list[OutfitOut] = Field(default_factory=list)
 
 
 class CategoryOut(BaseModel):

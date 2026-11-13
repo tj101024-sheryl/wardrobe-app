@@ -9,6 +9,7 @@ backend/data/wardrobe.db
 backend/data/wardrobe.db-*
 backend/data/uploads/*
 backend/data/cutouts/*
+backend/data/shares/*
 !backend/data/uploads/.gitkeep
 !backend/data/cutouts/.gitkeep
 

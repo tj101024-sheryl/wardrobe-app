@@ -201,6 +201,7 @@ class Comment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     outfit: Mapped["Outfit"] = relationship(back_populates="comments")
+    user: Mapped["User"] = relationship()
 
 
 class Follow(Base):

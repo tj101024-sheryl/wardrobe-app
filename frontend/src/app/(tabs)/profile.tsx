@@ -8,11 +8,12 @@ import {
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { http } from "../../api";
-import { Item, Outfit, User, categoryIcon } from "../../types";
+import { Item, Outfit, User, UserProfile, categoryIcon } from "../../types";
 import { colors, radius, shadow, type } from "../../theme";
 
 export default function ProfileScreen() {
   const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [outfits, setOutfits] = useState<Outfit[]>([]);
 
@@ -28,6 +29,12 @@ export default function ProfileScreen() {
           setUser(u);
           setItems(its);
           setOutfits(ofs);
+          try {
+            const p = await http.get<UserProfile>(`/api/users/${u.id}`);
+            setProfile(p);
+          } catch {
+            // 社群檔案載入失敗不影響衣櫃
+          }
         } catch {
           // 免登入模式可能沒有 me，忽略
         }
@@ -57,15 +64,32 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.stat}>
-            <Text style={styles.statNum}>{outfits.length}</Text>
+            <Text style={styles.statNum}>
+              {profile?.outfit_count ?? outfits.length}
+            </Text>
             <Text style={styles.statLabel}>套穿搭</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.stat}>
-            <Text style={styles.statNum}>0</Text>
+            <Text style={styles.statNum}>{profile?.follower_count ?? 0}</Text>
+            <Text style={styles.statLabel}>粉絲</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.stat}>
+            <Text style={styles.statNum}>{profile?.following_count ?? 0}</Text>
             <Text style={styles.statLabel}>追蹤中</Text>
           </View>
         </View>
+
+        {user ? (
+          <TouchableOpacity
+            style={styles.profileLink}
+            onPress={() => router.push(`/user/${user.id}`)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.profileLinkText}>查看我的公開檔案 ›</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.section}>
@@ -100,6 +124,9 @@ export default function ProfileScreen() {
             style={styles.row}
             activeOpacity={0.7}
             onPress={() => {
+              if (row === "個人檔案" && user) {
+                router.push(`/user/${user.id}`);
+              }
               if (row === "通知") router.push("/settings/notifications");
             }}
           >
@@ -157,6 +184,12 @@ const styles = StyleSheet.create({
   statNum: { ...type.heading, color: colors.text, fontSize: 20 },
   statLabel: { ...type.caption, color: colors.sub, marginTop: 2 },
   statDivider: { width: 1, height: 28, backgroundColor: colors.border },
+  profileLink: { marginTop: 12, paddingVertical: 4 },
+  profileLinkText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.sub,
+  },
   section: { marginTop: 20, paddingHorizontal: 16 },
   sectionTitle: { ...type.label, color: colors.sub, marginBottom: 10, marginLeft: 4 },
   emptyText: { ...type.caption, color: colors.faint, marginLeft: 4 },

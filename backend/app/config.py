@@ -4,10 +4,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 CUTOUT_DIR = DATA_DIR / "cutouts"
+SHARE_DIR = DATA_DIR / "shares"
 DB_PATH = DATA_DIR / "wardrobe.db"
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CUTOUT_DIR.mkdir(parents=True, exist_ok=True)
+SHARE_DIR.mkdir(parents=True, exist_ok=True)
 
 SECRET_KEY = "dev-secret-change-me-in-production"
 ALGORITHM = "HS256"
