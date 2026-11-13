@@ -8,23 +8,26 @@ import {
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { http } from "../../api";
-import { Item, User, categoryIcon } from "../../types";
+import { Item, Outfit, User, categoryIcon } from "../../types";
 import { colors, radius, shadow, type } from "../../theme";
 
 export default function ProfileScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [items, setItems] = useState<Item[]>([]);
+  const [outfits, setOutfits] = useState<Outfit[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
         try {
-          const [u, its] = await Promise.all([
+          const [u, its, ofs] = await Promise.all([
             http.get<User>("/api/auth/me"),
             http.get<Item[]>("/api/items"),
+            http.get<Outfit[]>("/api/outfits?limit=200"),
           ]);
           setUser(u);
           setItems(its);
+          setOutfits(ofs);
         } catch {
           // 免登入模式可能沒有 me，忽略
         }
@@ -54,7 +57,7 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.stat}>
-            <Text style={styles.statNum}>0</Text>
+            <Text style={styles.statNum}>{outfits.length}</Text>
             <Text style={styles.statLabel}>套穿搭</Text>
           </View>
           <View style={styles.statDivider} />
@@ -92,7 +95,14 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>設定</Text>
         {["個人檔案", "通知", "關於"].map((row) => (
-          <TouchableOpacity key={row} style={styles.row} activeOpacity={0.7}>
+          <TouchableOpacity
+            key={row}
+            style={styles.row}
+            activeOpacity={0.7}
+            onPress={() => {
+              if (row === "通知") router.push("/settings/notifications");
+            }}
+          >
             <Text style={styles.rowText}>{row}</Text>
             <Text style={styles.rowArrow}>›</Text>
           </TouchableOpacity>

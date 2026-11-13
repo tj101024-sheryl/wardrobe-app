@@ -2,10 +2,11 @@ import shutil
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
+from ..color_utils import family_from_text
 from ..config import CUTOUT_DIR, UPLOAD_DIR
 from ..database import get_db
 from ..models import Item, User
@@ -39,6 +40,7 @@ def item_to_out(item: Item) -> ItemOut:
 def list_items(
     item_type: str | None = None,
     category: str | None = None,
+    efficacy: str | None = None,
     q: str | None = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -48,6 +50,8 @@ def list_items(
         query = query.filter(Item.item_type == item_type)
     if category and category != "all":
         query = query.filter(Item.category == category)
+    if efficacy:
+        query = query.filter(Item.efficacy.like(f"%{efficacy}%"))
     if q:
         like = f"%{q}%"
         query = query.filter(
@@ -63,23 +67,27 @@ def list_items(
 @router.post("", response_model=ItemOut)
 async def create_item(
     file: UploadFile = File(...),
-    name: str = "",
-    item_type: str = "clothes",
-    category: str = "other",
-    color: str = "",
-    season: str = "",
-    occasion: str = "",
-    weather: str = "",
-    style: str = "",
-    expiry: str = "",
-    tags: str = "",
-    source_url: str = "",
+    name: str = Form(""),
+    item_type: str = Form("clothes"),
+    category: str = Form("other"),
+    color: str = Form(""),
+    color_family: str = Form(""),
+    color_hex: str = Form(""),
+    season: str = Form(""),
+    occasion: str = Form(""),
+    weather: str = Form(""),
+    style: str = Form(""),
+    expiry: str = Form(""),
+    efficacy: str = Form(""),
+    tags: str = Form(""),
+    source_url: str = Form(""),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     return await _save_upload(
-        file, name, item_type, category, color, season, occasion, weather, style,
-        expiry, tags, source_url, user, db,
+        file, name, item_type, category, color, color_family, color_hex,
+        season, occasion, weather, style, expiry, efficacy, tags, source_url,
+        user, db,
     )
 
 
@@ -89,11 +97,14 @@ async def _save_upload(
     item_type: str,
     category: str,
     color: str,
+    color_family: str,
+    color_hex: str,
     season: str,
     occasion: str,
     weather: str,
     style: str,
     expiry: str,
+    efficacy: str,
     tags: str,
     source_url: str,
     user: User,
@@ -120,11 +131,14 @@ async def _save_upload(
         item_type=item_type or "clothes",
         category=category or "other",
         color=color,
+        color_family=color_family or family_from_text(color),
+        color_hex=color_hex,
         season=season,
         occasion=occasion,
         weather=weather,
         style=style,
         expiry=expiry,
+        efficacy=efficacy,
         tags=tag_list,
         image_path=filename,
         source_url=source_url or None,
@@ -145,8 +159,11 @@ def update_item(
     item = db.get(Item, item_id)
     if not item or item.user_id != user.id:
         raise HTTPException(404, "找不到衣物")
-    for field, value in data.model_dump(exclude_unset=True).items():
+    payload = data.model_dump(exclude_unset=True)
+    for field, value in payload.items():
         setattr(item, field, value)
+    if "color" in payload and "color_family" not in payload:
+        item.color_family = family_from_text(item.color)
     db.commit()
     db.refresh(item)
     return item_to_out(item)

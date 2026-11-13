@@ -13,16 +13,26 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { http } from "../api";
-import { ScrapeResult } from "../types";
+import { ITEM_TYPES, ScrapeResult, joinEfficacy } from "../types";
+import { CategoryPicker, EfficacyPicker } from "../components/CategoryPickers";
 import { colors, radius, shadow, type } from "../theme";
 
 export default function ScrapeScreen() {
   const [url, setUrl] = useState("");
   const [result, setResult] = useState<ScrapeResult | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [itemType, setItemType] = useState("clothes");
+  const [category, setCategory] = useState("");
+  const [efficacy, setEfficacy] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  function chooseType(key: string) {
+    setItemType(key);
+    setCategory("");
+    setEfficacy([]);
+  }
 
   async function scrape() {
     if (!url.trim()) {
@@ -68,7 +78,9 @@ export default function ScrapeScreen() {
         await http.post("/api/scrape/save", {
           url: img,
           name: "",
-          category: "other",
+          item_type: itemType,
+          category,
+          efficacy: joinEfficacy(efficacy),
           source_page: result.url,
         });
         ok++;
@@ -178,6 +190,42 @@ export default function ScrapeScreen() {
                 </TouchableOpacity>
               );
             })}
+          </View>
+
+          <View style={styles.classCard}>
+            <Text style={styles.fieldLabel}>存入的大分類</Text>
+            <View style={styles.chipRow}>
+              {ITEM_TYPES.map((t) => (
+                <TouchableOpacity
+                  key={t.key}
+                  style={[styles.chip, itemType === t.key && styles.chipActive]}
+                  onPress={() => chooseType(t.key)}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      itemType === t.key && styles.chipTextActive,
+                    ]}
+                  >
+                    {t.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.fieldLabel}>分類</Text>
+            <CategoryPicker
+              itemType={itemType}
+              value={category}
+              onChange={setCategory}
+            />
+
+            <EfficacyPicker
+              itemType={itemType}
+              values={efficacy}
+              onChange={setEfficacy}
+            />
           </View>
 
           <TouchableOpacity
@@ -307,6 +355,29 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   kindText: { color: "#fff", fontSize: 10, fontWeight: "600" },
+  classCard: {
+    marginTop: 18,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    padding: 16,
+    ...shadow.soft,
+  },
+  fieldLabel: {
+    ...type.label,
+    color: colors.sub,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: {
+    backgroundColor: colors.chip,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+  },
+  chipActive: { backgroundColor: colors.chipActive },
+  chipText: { fontSize: 13, color: colors.sub, fontWeight: "500" },
+  chipTextActive: { color: "#fff", fontWeight: "700" },
   saveBtn: {
     backgroundColor: colors.primary,
     borderRadius: radius.full,

@@ -1,0 +1,530 @@
+from datetime import date, datetime
+from calendar import monthrange
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, joinedload
+
+from ..auth import get_current_user
+from ..config import UPLOAD_DIR
+from ..database import get_db
+from ..models import Item, Outfit, OutfitItem, OutfitProduct, User, WearLog
+from ..schemas import (
+    AutoComposeIn,
+    AutoComposeOut,
+    AutoOutfitOut,
+    OutfitCalendarDay,
+    OutfitCreate,
+    OutfitOut,
+    OutfitTodayOut,
+    OutfitUpdate,
+    OutfitWearIn,
+    OutfitWearOut,
+    RecommendationGroupsOut,
+    WeatherOut,
+    WeatherRecommendOut,
+)
+from ..services.recommend import auto_compose, recommendation_groups
+from ..services.weather import fetch_weather, manual_weather
+from .items import item_to_out
+
+router = APIRouter(prefix="/outfits", tags=["outfits"])
+
+VISIBILITIES = {"public", "followers", "private"}
+
+
+def _clean_photo(value: str | None) -> str | None:
+    if not value:
+        return None
+    name = Path(str(value).replace("\\", "/")).name
+    if name.startswith("files"):
+        raise HTTPException(400, "照片路徑不正確")
+    if not (UPLOAD_DIR / name).exists():
+        raise HTTPException(400, "找不到上傳的照片，請重新上傳")
+    return name
+
+
+def _photo_url(value: str | None) -> str | None:
+    return f"/files/uploads/{value}" if value else None
+
+
+def _delete_photo(value: str | None) -> None:
+    if not value:
+        return
+    target = UPLOAD_DIR / Path(value).name
+    if target.exists():
+        target.unlink()
+
+
+def _today() -> str:
+    return date.today().isoformat()
+
+
+def _day(value: str) -> str:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date().isoformat()
+    except (ValueError, TypeError):
+        raise HTTPException(400, "日期格式應為 YYYY-MM-DD")
+
+
+def _owned(db: Session, user: User, outfit_id: int) -> Outfit:
+    outfit = (
+        db.query(Outfit)
+        .options(
+            joinedload(Outfit.items).joinedload(OutfitItem.item),
+            joinedload(Outfit.products).joinedload(OutfitProduct.item),
+        )
+        .filter(Outfit.id == outfit_id, Outfit.user_id == user.id)
+        .first()
+    )
+    if not outfit:
+        raise HTTPException(404, "找不到這套穿搭")
+    return outfit
+
+
+def _to_out(outfit: Outfit) -> OutfitOut:
+    out = OutfitOut.model_validate(outfit)
+    out.weather = outfit.weather or {}
+    out.makeup_visibility = outfit.makeup_visibility or "public"
+    out.photo_url = _photo_url(outfit.photo_path)
+    out.makeup_photo_url = _photo_url(outfit.makeup_photo_path)
+    for row_out, row in zip(out.items, outfit.items):
+        row_out.item = item_to_out(row.item)
+    for row_out, row in zip(out.products, outfit.products):
+        row_out.item = item_to_out(row.item)
+    out.like_count = len(outfit.likes)
+    out.comment_count = len(outfit.comments)
+    return out
+
+
+def _base_query(db: Session, user: User):
+    return (
+        db.query(Outfit)
+        .options(
+            joinedload(Outfit.items).joinedload(OutfitItem.item),
+            joinedload(Outfit.products).joinedload(OutfitProduct.item),
+        )
+        .filter(Outfit.user_id == user.id)
+    )
+
+
+def _sync_items(
+    db: Session, user: User, outfit: Outfit, rows
+) -> None:
+    for old in list(outfit.items):
+        db.delete(old)
+    db.flush()
+    seen: set[int] = set()
+    for row in rows:
+        if row.item_id in seen:
+            continue
+        seen.add(row.item_id)
+        item = db.get(Item, row.item_id)
+        if not item or item.user_id != user.id:
+            raise HTTPException(400, "穿搭中包含不存在的衣物")
+        db.add(
+            OutfitItem(
+                outfit_id=outfit.id,
+                item_id=row.item_id,
+                role=row.role or "",
+                x=row.x,
+                y=row.y,
+                scale=row.scale,
+                rotation=row.rotation,
+                z_index=row.z_index,
+            )
+        )
+    db.flush()
+
+
+def _sync_products(
+    db: Session, user: User, outfit: Outfit, item_ids: list[int]
+) -> None:
+    for old in list(outfit.products):
+        db.delete(old)
+    db.flush()
+    seen: set[int] = set()
+    for item_id in item_ids:
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        item = db.get(Item, item_id)
+        if not item or item.user_id != user.id:
+            raise HTTPException(400, "使用品項中包含不存在的項目")
+        db.add(OutfitProduct(outfit_id=outfit.id, item_id=item_id))
+    db.flush()
+
+
+def _sorted_items(outfit: Outfit) -> list[OutfitItem]:
+    return sorted(outfit.items, key=lambda oi: (oi.z_index, oi.id))
+
+
+@router.get("", response_model=list[OutfitOut])
+def list_outfits(
+    from_date: str | None = Query(None, alias="from"),
+    to_date: str | None = Query(None, alias="to"),
+    status: str | None = None,
+    limit: int = Query(100, ge=1, le=300),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = _base_query(db, user)
+    if from_date:
+        query = query.filter(Outfit.date >= _day(from_date))
+    if to_date:
+        query = query.filter(Outfit.date <= _day(to_date))
+    if status:
+        query = query.filter(Outfit.status == status)
+    rows = (
+        query.order_by(Outfit.date.desc(), Outfit.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [_to_out(o) for o in rows]
+
+
+@router.get("/today", response_model=OutfitTodayOut)
+def today_outfit(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    today = _today()
+    outfit = (
+        _base_query(db, user)
+        .filter(Outfit.date == today)
+        .order_by(Outfit.id.desc())
+        .first()
+    )
+    pending = (
+        _base_query(db, user)
+        .filter(Outfit.status == "scheduled", Outfit.date <= today)
+        .order_by(Outfit.date.asc())
+        .all()
+    )
+    return OutfitTodayOut(
+        date=today,
+        outfit=_to_out(outfit) if outfit else None,
+        pending=[_to_out(o) for o in pending],
+    )
+
+
+@router.get("/pending", response_model=list[OutfitOut])
+def pending_outfits(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    today = _today()
+    rows = (
+        _base_query(db, user)
+        .filter(Outfit.status == "scheduled", Outfit.date <= today)
+        .order_by(Outfit.date.asc())
+        .all()
+    )
+    return [_to_out(o) for o in rows]
+
+
+@router.get("/calendar", response_model=list[OutfitCalendarDay])
+def outfit_calendar(
+    year: int = Query(..., ge=2000, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    start = date(year, month, 1)
+    end = date(year, month, monthrange(year, month)[1])
+    rows = (
+        _base_query(db, user)
+        .filter(Outfit.date >= start.isoformat(), Outfit.date <= end.isoformat())
+        .order_by(Outfit.date.asc())
+        .all()
+    )
+    days: dict[str, OutfitCalendarDay] = {}
+    for outfit in rows:
+        day = days.get(outfit.date)
+        if not day:
+            day = OutfitCalendarDay(date=outfit.date, count=0)
+            days[outfit.date] = day
+        day.count += 1
+        day.outfit_ids.append(outfit.id)
+        day.statuses.append(outfit.status)
+    return [days[k] for k in sorted(days)]
+
+
+@router.post("", response_model=OutfitOut)
+def create_outfit(
+    data: OutfitCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    day = _day(data.date) if data.date else _today()
+    visibility = data.visibility if data.visibility in VISIBILITIES else "public"
+    makeup_visibility = (
+        data.makeup_visibility
+        if data.makeup_visibility in VISIBILITIES
+        else "public"
+    )
+    status = "scheduled" if day > _today() else "draft"
+    outfit = Outfit(
+        user_id=user.id,
+        title=data.title.strip(),
+        date=day,
+        notes=data.notes,
+        occasion=data.occasion,
+        visibility=visibility,
+        makeup_visibility=makeup_visibility,
+        photo_path=_clean_photo(data.photo_path),
+        makeup_photo_path=_clean_photo(data.makeup_photo_path),
+        status=status,
+        layout_mode=data.layout_mode or "list",
+        weather=data.weather or {},
+        canvas_data=data.canvas_data or {},
+    )
+    db.add(outfit)
+    db.flush()
+    _sync_items(db, user, outfit, data.items)
+    _sync_products(db, user, outfit, data.product_ids)
+    db.commit()
+    return _to_out(_owned(db, user, outfit.id))
+
+
+def _candidate_items(db: Session, user: User) -> list[Item]:
+    return (
+        db.query(Item)
+        .filter(
+            Item.user_id == user.id,
+            Item.item_type.in_(("clothes", "accessories")),
+        )
+        .all()
+    )
+
+
+@router.get("/recommendations", response_model=WeatherRecommendOut)
+async def weather_recommendations(
+    lat: float = Query(0, ge=-90, le=90),
+    lon: float = Query(0, ge=-180, le=180),
+    city: str | None = None,
+    manual: bool = False,
+    temp_c: float | None = None,
+    rain_prob: int | None = None,
+    weather_text: str | None = None,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if manual and temp_c is not None:
+        weather = manual_weather(
+            temp_c,
+            rain_prob or 0,
+            weather_text or "多雲",
+            city or "手動天氣",
+        )
+    else:
+        weather = await fetch_weather(lat, lon, city)
+    groups = recommendation_groups(_candidate_items(db, user), weather)
+    return WeatherRecommendOut(
+        weather=WeatherOut.model_validate(weather),
+        groups=RecommendationGroupsOut(
+            **{
+                key: [item_to_out(item) for item in values]
+                for key, values in groups.items()
+            }
+        ),
+    )
+
+
+@router.post("/auto-compose", response_model=AutoComposeOut)
+async def weather_auto_compose(
+    data: AutoComposeIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if data.manual and data.temp_c is not None:
+        weather = manual_weather(
+            data.temp_c,
+            data.rain_prob or 0,
+            data.weather_text or "多雲",
+            data.city or "手動天氣",
+        )
+    else:
+        weather = await fetch_weather(data.lat, data.lon, data.city)
+    outfits = auto_compose(
+        _candidate_items(db, user),
+        weather,
+        data.seed,
+        data.locked_item_ids,
+    )
+    return AutoComposeOut(
+        weather=WeatherOut.model_validate(weather),
+        outfits=[
+            AutoOutfitOut(
+                occasion=row["occasion"],
+                items=[item_to_out(item) for item in row["items"]],
+                reasons=row["reasons"],
+            )
+            for row in outfits
+        ],
+    )
+
+
+@router.get("/{outfit_id}", response_model=OutfitOut)
+def get_outfit(
+    outfit_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _to_out(_owned(db, user, outfit_id))
+
+
+@router.patch("/{outfit_id}", response_model=OutfitOut)
+def update_outfit(
+    outfit_id: int,
+    data: OutfitUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    outfit = _owned(db, user, outfit_id)
+    payload = data.model_dump(exclude_unset=True)
+    items = payload.pop("items", None)
+    product_ids = payload.pop("product_ids", None)
+
+    if "date" in payload and payload["date"]:
+        payload["date"] = _day(payload["date"])
+        if outfit.status != "worn":
+            outfit.status = (
+                "scheduled" if payload["date"] > _today() else "draft"
+            )
+    for key in ("visibility", "makeup_visibility"):
+        if key in payload and payload[key] not in VISIBILITIES:
+            raise HTTPException(400, "隱私設定不正確")
+
+    for key in ("photo_path", "makeup_photo_path"):
+        if key in payload:
+            new_path = _clean_photo(payload[key])
+            old_path = getattr(outfit, key)
+            if old_path and old_path != new_path:
+                _delete_photo(old_path)
+            payload[key] = new_path
+
+    for field, value in payload.items():
+        setattr(outfit, field, value)
+    if items is not None:
+        _sync_items(db, user, outfit, data.items or [])
+    if product_ids is not None:
+        _sync_products(db, user, outfit, data.product_ids or [])
+    db.commit()
+    return _to_out(_owned(db, user, outfit.id))
+
+
+@router.delete("/{outfit_id}")
+def delete_outfit(
+    outfit_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    outfit = _owned(db, user, outfit_id)
+    _delete_photo(outfit.photo_path)
+    _delete_photo(outfit.makeup_photo_path)
+    db.query(WearLog).filter(WearLog.outfit_id == outfit.id).update(
+        {"outfit_id": None}, synchronize_session=False
+    )
+    db.delete(outfit)
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/{outfit_id}/wear", response_model=OutfitWearOut)
+def wear_outfit(
+    outfit_id: int,
+    data: OutfitWearIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    outfit = _owned(db, user, outfit_id)
+    item_ids = list(
+        dict.fromkeys(
+            [row.item_id for row in outfit.items]
+            + [row.item_id for row in outfit.products]
+        )
+    )
+    if not item_ids:
+        raise HTTPException(400, "這天還沒有可累計的衣物或使用品項")
+    worn_on = _day(data.worn_on) if data.worn_on else (outfit.date or _today())
+    if worn_on > _today():
+        raise HTTPException(400, "還沒到這一天，不能先累計穿著次數")
+
+    counted: list[int] = []
+    skipped: list[int] = []
+    for item_id in item_ids:
+        exists = (
+            db.query(WearLog)
+            .filter(
+                WearLog.user_id == user.id,
+                WearLog.item_id == item_id,
+                WearLog.worn_on == worn_on,
+            )
+            .first()
+        )
+        if exists:
+            skipped.append(item_id)
+            continue
+        db.add(
+            WearLog(
+                user_id=user.id,
+                outfit_id=outfit.id,
+                item_id=item_id,
+                worn_on=worn_on,
+                source="outfit",
+            )
+        )
+        item = db.get(Item, item_id)
+        if item:
+            item.wear_count = (item.wear_count or 0) + 1
+            item.last_worn_on = worn_on
+        counted.append(item_id)
+
+    outfit.status = "worn"
+    outfit.date = worn_on
+    db.commit()
+    return OutfitWearOut(
+        outfit=_to_out(_owned(db, user, outfit.id)),
+        counted_items=counted,
+        skipped_already_counted=skipped,
+    )
+
+
+@router.delete("/{outfit_id}/wear", response_model=OutfitOut)
+def undo_wear(
+    outfit_id: int,
+    worn_on: str | None = Query(None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    outfit = _owned(db, user, outfit_id)
+    target = _day(worn_on) if worn_on else (outfit.date or _today())
+    logs = (
+        db.query(WearLog)
+        .filter(
+            WearLog.user_id == user.id,
+            WearLog.outfit_id == outfit.id,
+            WearLog.worn_on == target,
+        )
+        .all()
+    )
+    for log in logs:
+        item = db.get(Item, log.item_id)
+        if item:
+            item.wear_count = max(0, (item.wear_count or 0) - 1)
+            latest = (
+                db.query(WearLog)
+                .filter(
+                    WearLog.user_id == user.id,
+                    WearLog.item_id == log.item_id,
+                    WearLog.id != log.id,
+                )
+                .order_by(WearLog.worn_on.desc())
+                .first()
+            )
+            item.last_worn_on = latest.worn_on if latest else ""
+        db.delete(log)
+    outfit.status = "scheduled" if outfit.date > _today() else "draft"
+    db.commit()
+    return _to_out(_owned(db, user, outfit.id))

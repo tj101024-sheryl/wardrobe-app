@@ -4,7 +4,18 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import CORS_ORIGINS, DATA_DIR, UPLOAD_DIR
 from .database import init_db
-from .routers import auth, cutout, items, scrape
+from .routers import (
+    auth,
+    categories,
+    cutout,
+    explore,
+    items,
+    outfits,
+    scrape,
+    uploads,
+    users,
+    weather,
+)
 
 app = FastAPI(title="穿搭衣櫃 API", version="0.1.0")
 
@@ -29,6 +40,12 @@ def health():
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(items.router, prefix="/api")
+app.include_router(categories.router, prefix="/api")
+app.include_router(outfits.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
+app.include_router(uploads.router, prefix="/api")
+app.include_router(explore.router, prefix="/api")
+app.include_router(weather.router, prefix="/api")
 app.include_router(scrape.router, prefix="/api")
 app.include_router(cutout.router, prefix="/api")
 

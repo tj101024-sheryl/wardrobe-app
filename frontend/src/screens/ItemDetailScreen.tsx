@@ -12,7 +12,6 @@ import {
 import { useFocusEffect, router } from "expo-router";
 import { http } from "../api";
 import {
-  CATEGORY_LABEL,
   ITEM_TYPE_LABEL,
   Item,
   OCCASIONS,
@@ -21,7 +20,11 @@ import {
   WEATHERS,
   categoryIcon,
   hasClothingFields,
+  joinEfficacy,
+  parseEfficacy,
+  usageLabel,
 } from "../types";
+import { CategoryPicker, EfficacyPicker } from "../components/CategoryPickers";
 import { colors, radius, shadow, type } from "../theme";
 
 function ChipRow({
@@ -68,6 +71,7 @@ export default function ItemDetailScreen({ itemId }: { itemId: number }) {
   const id = itemId;
   const [item, setItem] = useState<Item | null>(null);
   const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
   const [color, setColor] = useState("");
   const [season, setSeason] = useState("");
   const [occasion, setOccasion] = useState("");
@@ -77,6 +81,7 @@ export default function ItemDetailScreen({ itemId }: { itemId: number }) {
   const [brand, setBrand] = useState("");
   const [size, setSize] = useState("");
   const [price, setPrice] = useState("");
+  const [efficacy, setEfficacy] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -91,6 +96,7 @@ export default function ItemDetailScreen({ itemId }: { itemId: number }) {
       }
       setItem(found);
       setName(found.name);
+      setCategory(found.category);
       setColor(found.color);
       setSeason(found.season);
       setOccasion(found.occasion);
@@ -100,6 +106,7 @@ export default function ItemDetailScreen({ itemId }: { itemId: number }) {
       setBrand(found.brand);
       setSize(found.size);
       setPrice(found.price);
+      setEfficacy(parseEfficacy(found.efficacy));
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -120,12 +127,14 @@ export default function ItemDetailScreen({ itemId }: { itemId: number }) {
     try {
       await http.patch(`/api/items/${item.id}`, {
         name,
+        category,
         color,
         season: hasClothingFields(item.item_type) ? season : "",
         occasion,
         weather: hasClothingFields(item.item_type) ? weather : "",
         style,
         expiry: hasClothingFields(item.item_type) ? "" : expiry,
+        efficacy: joinEfficacy(efficacy),
         brand,
         size,
         price,
@@ -201,10 +210,22 @@ export default function ItemDetailScreen({ itemId }: { itemId: number }) {
         <View style={styles.readonlyPill}>
           <Text style={styles.readonlyPillText}>
             {ITEM_TYPE_LABEL[item.item_type] || "衣服"}
-            {" · "}
-            {CATEGORY_LABEL[item.category] || item.category}
           </Text>
         </View>
+
+        <Label>分類</Label>
+        <CategoryPicker
+          itemType={item.item_type}
+          value={category}
+          onChange={setCategory}
+          autoDefault={false}
+        />
+
+        <EfficacyPicker
+          itemType={item.item_type}
+          values={efficacy}
+          onChange={setEfficacy}
+        />
 
         <Label>顏色</Label>
         <TextInput
@@ -231,10 +252,16 @@ export default function ItemDetailScreen({ itemId }: { itemId: number }) {
       </View>
 
       <View style={styles.formCard}>
-        <Label>穿著次數</Label>
+        <Label>
+          {item.item_type === "clothes" ? "穿著次數" : "使用次數"}
+        </Label>
         <View style={styles.wearRow}>
           <Text style={styles.wearCount}>
-            {item.wear_count > 0 ? `穿過 ${item.wear_count} 次` : "還沒穿過"}
+            {item.wear_count > 0
+              ? `${usageLabel(item.item_type)} ${item.wear_count} 次`
+              : item.item_type === "clothes"
+              ? "還沒穿過"
+              : "還沒用過"}
           </Text>
         </View>
 

@@ -15,13 +15,14 @@ import { router } from "expo-router";
 import { http } from "../api";
 import {
   ITEM_TYPES,
-  categoriesOf,
   hasClothingFields,
   OCCASIONS,
   SEASONS,
   STYLES,
   WEATHERS,
+  joinEfficacy,
 } from "../types";
+import { CategoryPicker, EfficacyPicker } from "../components/CategoryPickers";
 import { colors, radius, shadow, type } from "../theme";
 
 function ChipRow({
@@ -72,22 +73,24 @@ export default function UploadScreen() {
   const [uri, setUri] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [itemType, setItemType] = useState("clothes");
-  const [category, setCategory] = useState("top");
+  const [category, setCategory] = useState("");
   const [color, setColor] = useState("");
   const [season, setSeason] = useState("");
   const [occasion, setOccasion] = useState("");
   const [weather, setWeather] = useState("");
   const [style, setStyle] = useState("");
   const [expiry, setExpiry] = useState("");
+  const [efficacy, setEfficacy] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   function chooseType(key: string) {
     setItemType(key);
-    setCategory(categoriesOf(key)[0]?.key ?? "other");
+    setCategory("");
     setSeason("");
     setWeather("");
     setExpiry("");
+    setEfficacy([]);
   }
 
   async function pick(fromCamera: boolean) {
@@ -131,6 +134,7 @@ export default function UploadScreen() {
       form.append("weather", hasClothingFields(itemType) ? weather : "");
       form.append("style", style);
       form.append("expiry", hasClothingFields(itemType) ? "" : expiry);
+      form.append("efficacy", joinEfficacy(efficacy));
       form.append("tags", "[]");
 
       await http.post("/api/items", form);
@@ -155,7 +159,8 @@ export default function UploadScreen() {
     setStyle("");
     setExpiry("");
     setItemType("clothes");
-    setCategory("top");
+    setCategory("");
+    setEfficacy([]);
   }
 
   return (
@@ -233,25 +238,17 @@ export default function UploadScreen() {
         </View>
 
         <SectionTitle>分類</SectionTitle>
-        <View style={styles.chipRow}>
-          {categoriesOf(itemType).map((c) => (
-            <TouchableOpacity
-              key={c.key}
-              style={[styles.chip, category === c.key && styles.chipActive]}
-              onPress={() => setCategory(c.key)}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  category === c.key && styles.chipTextActive,
-                ]}
-              >
-                {c.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <CategoryPicker
+          itemType={itemType}
+          value={category}
+          onChange={setCategory}
+        />
+
+        <EfficacyPicker
+          itemType={itemType}
+          values={efficacy}
+          onChange={setEfficacy}
+        />
 
         {hasClothingFields(itemType) ? (
           <>

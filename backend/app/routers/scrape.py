@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
+from ..color_utils import family_from_text
 from ..config import UPLOAD_DIR
 from ..database import get_db
 from ..models import Item, User
@@ -257,11 +258,14 @@ def save_scraped_image(
         item_type=data.item_type or "clothes",
         category=data.category or "other",
         color=data.color,
+        color_family=data.color_family or family_from_text(data.color),
+        color_hex=data.color_hex,
         season=data.season,
         occasion=data.occasion,
         weather=data.weather,
         style=data.style,
         expiry=data.expiry,
+        efficacy=data.efficacy,
         tags=data.tags,
         image_path=filename,
         source_url=data.source_page or data.url,
