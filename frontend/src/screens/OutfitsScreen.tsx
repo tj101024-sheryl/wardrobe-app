@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Image,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
-import { http } from "../api";
+import { postWithRetry } from "../api";
 import { getWithCache } from "../cache";
 import {
   CATEGORY_LABEL,
@@ -45,6 +45,7 @@ export default function OutfitsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [offline, setOffline] = useState(false);
@@ -54,7 +55,7 @@ export default function OutfitsScreen() {
   const contentW = frame - 36;
   const cardW = (contentW - 12) / 2;
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (quiet = false): Promise<boolean> => {
     try {
       setError("");
       const days = weekDates();
@@ -75,8 +76,10 @@ export default function OutfitsScreen() {
       void syncOutfitReminders().catch(() => {
         // 沒有通知權限或 Web 版時忽略；設定頁會提示
       });
+      return true;
     } catch (e: any) {
-      setError(e.message);
+      if (!quiet) setError(e.message);
+      return false;
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -120,26 +123,40 @@ export default function OutfitsScreen() {
   }
 
   async function completeToday() {
-    if (!current || busy) return;
+    if (!current || busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      const res = await http.post<{
+      const res = await postWithRetry<{
         counted_items: number[];
         skipped_already_counted: number[];
       }>(`/api/outfits/${current.id}/wear`, { worn_on: current.date });
-      setNotice(
+      const message =
         `已累計 ${res.counted_items.length} 件穿著次數` +
-          (res.skipped_already_counted.length
-            ? `，${res.skipped_already_counted.length} 件今天已計過`
-            : "")
-      );
-      await load();
+        (res.skipped_already_counted.length
+          ? `，${res.skipped_already_counted.length} 件今天已計過`
+          : "");
+      const refreshed = await load(true);
+      if (!refreshed) {
+        setToday((prev) =>
+          prev && prev.outfit
+            ? {
+                ...prev,
+                outfit: { ...prev.outfit, status: "worn" },
+              }
+            : prev
+        );
+        setNotice(`${message}（資料更新失敗，請下拉重新整理）`);
+      } else {
+        setNotice(message);
+      }
       void syncOutfitReminders(true).catch(() => {});
     } catch (e: any) {
       setError(e.message);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -186,7 +203,11 @@ export default function OutfitsScreen() {
       {error ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={load}>
+          <TouchableOpacity
+            onPress={() => {
+              void load();
+            }}
+          >
             <Text style={styles.retry}>重試</Text>
           </TouchableOpacity>
         </View>

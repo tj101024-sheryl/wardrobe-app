@@ -3,6 +3,7 @@ from calendar import monthrange
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, object_session
 
 from ..auth import get_current_user
@@ -695,7 +696,20 @@ def wear_outfit(
 
     outfit.status = "worn"
     outfit.date = worn_on
-    db.commit()
+    outfit_pk = outfit.id
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        # 連點或兩個請求同時送出時，其中一個會撞到每日唯一 log。
+        # 這種情況視為「今天已經計過」，不要讓使用者看到連線／500 錯誤。
+        if "wear_logs" not in str(exc):
+            raise
+        return OutfitWearOut(
+            outfit=_to_out(_owned(db, user, outfit_pk), user),
+            counted_items=[],
+            skipped_already_counted=item_ids,
+        )
     return OutfitWearOut(
         outfit=_to_out(_owned(db, user, outfit.id), user),
         counted_items=counted,

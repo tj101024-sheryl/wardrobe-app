@@ -31,6 +31,10 @@ async function parseError(res: Response): Promise<string> {
   }
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function api<T>(
   path: string,
   options: RequestInit = {}
@@ -68,3 +72,27 @@ export const http = {
     api<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   del: <T>(path: string) => api<T>(path, { method: "DELETE" }),
 };
+
+/**
+ * 用於「完成穿搭」這類可重複呼叫的寫入：
+ * 第一次若遇到暫時斷線，稍等後再試一次；後端以每日唯一 log 防重複。
+ */
+export async function postWithRetry<T>(
+  path: string,
+  body?: unknown,
+  retries = 1
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await http.post<T>(path, body);
+    } catch (error) {
+      lastError = error;
+      const isNetwork =
+        error instanceof ApiError && error.status === 0;
+      if (!isNetwork || attempt === retries) break;
+      await wait(600);
+    }
+  }
+  throw lastError;
+}

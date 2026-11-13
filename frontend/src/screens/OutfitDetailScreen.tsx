@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Heart, MessageCircle, Send } from "lucide-react-native";
-import { http } from "../api";
+import { http, postWithRetry } from "../api";
 import {
   AUDIENCE_LABEL,
   CATEGORY_LABEL,
@@ -54,6 +54,7 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
   const [outfit, setOutfit] = useState<Outfit | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [commentOpen, setCommentOpen] = useState(false);
@@ -63,17 +64,22 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
   const heroSize = Math.min(frame - 36, 260);
   const today = ymd(new Date());
 
-  const load = useCallback(async () => {
-    try {
-      setError("");
-      const data = await http.get<Outfit>(`/api/outfits/${outfitId}`);
-      setOutfit(data);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [outfitId]);
+  const load = useCallback(
+    async (quiet = false): Promise<boolean> => {
+      try {
+        setError("");
+        const data = await http.get<Outfit>(`/api/outfits/${outfitId}`);
+        setOutfit(data);
+        return true;
+      } catch (e: any) {
+        if (!quiet) setError(e.message);
+        return false;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [outfitId]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -82,43 +88,65 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
   );
 
   async function complete() {
-    if (!outfit) return;
+    if (!outfit || busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      const res = await http.post<{
+      const res = await postWithRetry<{
         counted_items: number[];
         skipped_already_counted: number[];
       }>(`/api/outfits/${outfit.id}/wear`, { worn_on: outfit.date });
-      setNotice(
+      const message =
         `已累計 ${res.counted_items.length} 件／樣` +
-          (res.skipped_already_counted.length
-            ? `，${res.skipped_already_counted.length} 項今天已計過`
-            : "")
+        (res.skipped_already_counted.length
+          ? `，${res.skipped_already_counted.length} 項今天已計過`
+          : "");
+      const refreshed = await load(true);
+      if (!refreshed) {
+        setOutfit((prev) =>
+          prev ? { ...prev, status: "worn" } : prev
+        );
+      }
+      setNotice(
+        refreshed
+          ? message
+          : `${message}（資料更新失敗，請返回列表重新整理）`
       );
-      await load();
       void syncOutfitReminders(true).catch(() => {});
     } catch (e: any) {
       setError(e.message);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
 
   async function undo() {
-    if (!outfit) return;
+    if (!outfit || busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError("");
     setNotice("");
     try {
       await http.del(`/api/outfits/${outfit.id}/wear`);
-      setNotice("已復原這天的次數");
-      await load();
+      const refreshed = await load(true);
+      if (!refreshed) {
+        setOutfit((prev) =>
+          prev ? { ...prev, status: "draft" } : prev
+        );
+      }
+      setNotice(
+        refreshed
+          ? "已復原這天的次數"
+          : "已復原這天的次數（資料更新失敗，請返回列表重新整理）"
+      );
       void syncOutfitReminders(true).catch(() => {});
     } catch (e: any) {
       setError(e.message);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
