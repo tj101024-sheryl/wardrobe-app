@@ -47,6 +47,17 @@ router = APIRouter(prefix="/outfits", tags=["outfits"])
 
 VISIBILITIES = {"public", "followers", "private"}
 AUDIENCES = {"male", "female", "unisex"}
+CONTENT_TYPES = {"outfit", "makeup", "skincare", "tutorial", "review"}
+
+
+def _content_types(values: list[str] | None) -> list[str]:
+    if not values:
+        return ["outfit"]
+    cleaned: list[str] = []
+    for value in values:
+        if value in CONTENT_TYPES and value not in cleaned:
+            cleaned.append(value)
+    return cleaned or ["outfit"]
 
 
 def _clean_photo(value: str | None) -> str | None:
@@ -120,6 +131,7 @@ def _to_out(outfit: Outfit, viewer: User | None = None) -> OutfitOut:
     out.owner = UserBrief.model_validate(outfit.owner)
     out.weather = outfit.weather or {}
     out.audience = outfit.audience or "unisex"
+    out.content_types = _content_types(outfit.content_types)
     out.makeup_visibility = outfit.makeup_visibility or "public"
     out.photo_url = _photo_url(outfit.photo_path)
     out.makeup_photo_url = _photo_url(outfit.makeup_photo_path)
@@ -320,6 +332,7 @@ def create_outfit(
         notes=data.notes,
         occasion=data.occasion,
         audience=audience,
+        content_types=_content_types(data.content_types),
         visibility=visibility,
         makeup_visibility=makeup_visibility,
         photo_path=_clean_photo(data.photo_path),
@@ -551,6 +564,8 @@ def update_outfit(
             raise HTTPException(400, "隱私設定不正確")
     if "audience" in payload and payload["audience"] not in AUDIENCES:
         raise HTTPException(400, "內容取向不正確")
+    if "content_types" in payload:
+        payload["content_types"] = _content_types(payload["content_types"])
 
     for key in ("photo_path", "makeup_photo_path"):
         if key in payload:

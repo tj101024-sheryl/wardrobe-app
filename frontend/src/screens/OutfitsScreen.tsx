@@ -162,7 +162,7 @@ export default function OutfitsScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>我的穿搭</Text>
-          <Text style={styles.sub}>記錄今天的穿搭與妝容，留下好看的一天</Text>
+          <Text style={styles.sub}>記錄今天的穿搭、妝容與保養，留下好看的一天</Text>
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity
@@ -342,7 +342,7 @@ export default function OutfitsScreen() {
                     <View>
                       <View style={styles.lookSectionHead}>
                         <Text style={[styles.lookLabel, { marginBottom: 0 }]}>
-                          妝容
+                          妝容與保養
                         </Text>
                         <TouchableOpacity
                           style={styles.photoBtnSmall}
@@ -470,7 +470,7 @@ export default function OutfitsScreen() {
                     <Text style={styles.emptySlotHint}>照片或單品</Text>
                   </View>
                   <View style={styles.emptySlot}>
-                    <Text style={styles.emptySlotTitle}>妝容</Text>
+                    <Text style={styles.emptySlotTitle}>妝容／保養</Text>
                     <Text style={styles.emptySlotHint}>照片或品項</Text>
                   </View>
                 </View>

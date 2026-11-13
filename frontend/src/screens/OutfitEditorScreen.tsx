@@ -19,11 +19,13 @@ import { http } from "../api";
 import {
   AUDIENCE_SHORT_LABEL,
   CATEGORY_LABEL,
+  CONTENT_TYPE_OPTIONS,
   CanvasTransform,
   Item,
   OCCASIONS,
   Outfit,
   OUTFIT_ROLES,
+  OutfitContentType,
   outfitRoleOf,
   usageLabel,
   VISIBILITY_LABEL,
@@ -150,6 +152,9 @@ export default function OutfitEditorScreen() {
   const [notes, setNotes] = useState("");
   const [occasion, setOccasion] = useState("");
   const [audience, setAudience] = useState("unisex");
+  const [contentTypes, setContentTypes] = useState<OutfitContentType[]>([
+    "outfit",
+  ]);
   const [visibility, setVisibility] = useState("public");
   const [makeupVisibility, setMakeupVisibility] = useState("public");
   const [selected, setSelected] = useState<number[]>([]);
@@ -188,6 +193,9 @@ export default function OutfitEditorScreen() {
         setNotes(outfit.notes);
         setOccasion(outfit.occasion);
         setAudience(outfit.audience || "unisex");
+        setContentTypes(
+          outfit.content_types?.length ? outfit.content_types : ["outfit"]
+        );
         setVisibility(outfit.visibility);
         setMakeupVisibility(outfit.makeup_visibility || "public");
         setSelected(outfit.items.map((row) => row.item_id));
@@ -395,6 +403,16 @@ export default function OutfitEditorScreen() {
     );
   }
 
+  function toggleContentType(value: OutfitContentType) {
+    setContentTypes((prev) =>
+      prev.includes(value)
+        ? prev.length === 1
+          ? prev
+          : prev.filter((v) => v !== value)
+        : [...prev, value]
+    );
+  }
+
   function shiftDate(delta: number) {
     const base = parseYmd(dateStr) ?? new Date();
     setDateStr(ymd(addDays(base, delta)));
@@ -489,6 +507,7 @@ export default function OutfitEditorScreen() {
         notes,
         occasion,
         audience,
+        content_types: contentTypes,
         visibility,
         makeup_visibility: makeupVisibility,
         layout_mode: canvasMode ? "canvas" : "list",
@@ -842,7 +861,7 @@ export default function OutfitEditorScreen() {
 
         <View style={styles.makeupHead}>
           <View>
-            <Text style={styles.sectionTitle}>妝容與使用品項</Text>
+            <Text style={styles.sectionTitle}>妝容、保養與使用品項</Text>
             <Text style={styles.sectionHint}>
               可選填，選今天用的化妝品、保養品或其他品項
             </Text>
@@ -893,6 +912,30 @@ export default function OutfitEditorScreen() {
           placeholderTextColor={colors.faint}
           multiline
         />
+
+        <Text style={styles.label}>內容類型（可多選）</Text>
+        <Text style={styles.privacyHint}>
+          一套穿搭也能同時標成「穿搭＋妝容」；教學或產品推薦也可以一起標。
+        </Text>
+        <View style={styles.wrapRow}>
+          {CONTENT_TYPE_OPTIONS.map((option) => {
+            const active = contentTypes.includes(option.key);
+            return (
+              <TouchableOpacity
+                key={option.key}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => toggleContentType(option.key)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[styles.chipText, active && styles.chipTextActive]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
         <Text style={styles.label}>場合</Text>
         <View style={styles.wrapRow}>
@@ -960,7 +1003,7 @@ export default function OutfitEditorScreen() {
           })}
         </View>
 
-        <Text style={styles.label}>妝容與品項隱私</Text>
+        <Text style={styles.label}>妝容與保養隱私</Text>
         <View style={styles.wrapRow}>
           {(["public", "followers", "private"] as const).map((v) => {
             const active = makeupVisibility === v;

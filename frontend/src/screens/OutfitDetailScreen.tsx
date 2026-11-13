@@ -17,6 +17,7 @@ import { http } from "../api";
 import {
   AUDIENCE_LABEL,
   CATEGORY_LABEL,
+  CONTENT_TYPE_LABEL,
   LikeResult,
   Outfit,
   outfitBadge,
@@ -236,6 +237,12 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
             {outfit.audience
               ? ` · ${AUDIENCE_LABEL[outfit.audience] ?? outfit.audience}`
               : ""}
+            {outfit.content_types?.length
+              ? ` · ${outfit.content_types
+                  .map((value) => CONTENT_TYPE_LABEL[value] ?? "")
+                  .filter(Boolean)
+                  .join("／")}`
+              : ""}
           </Text>
         </View>
         <View
@@ -358,12 +365,12 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
 
       {outfit.makeup_hidden ? (
         <>
-          <Text style={styles.sectionTitle}>這天的妝容</Text>
+          <Text style={styles.sectionTitle}>這天的妝容與保養</Text>
           <View style={styles.lockedCard}>
             <Text style={styles.lockedIcon}>🔒</Text>
-            <Text style={styles.lockedTitle}>妝容未公開</Text>
+            <Text style={styles.lockedTitle}>妝容與保養未公開</Text>
             <Text style={styles.lockedText}>
-              對方只公開了穿搭，妝容維持私人或僅限追蹤者
+              對方只公開了穿搭，這部分維持私人或僅限追蹤者
             </Text>
           </View>
         </>
@@ -371,7 +378,7 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
 
       {hasMakeup ? (
         <>
-          <Text style={styles.sectionTitle}>這天的妝容</Text>
+          <Text style={styles.sectionTitle}>這天的妝容與保養</Text>
           {outfit.makeup_photo_url ? (
             <Image
               source={{ uri: fullUrl(outfit.makeup_photo_url) }}
@@ -431,7 +438,7 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
           </Text>
         </View>
         <View style={styles.metaRow}>
-          <Text style={styles.metaKey}>妝容隱私</Text>
+          <Text style={styles.metaKey}>妝容與保養隱私</Text>
           <Text style={styles.metaValue}>
             {VISIBILITY_LABEL[outfit.makeup_visibility] ??
               outfit.makeup_visibility}
@@ -441,6 +448,18 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
           <Text style={styles.metaKey}>內容取向</Text>
           <Text style={styles.metaValue}>
             {AUDIENCE_LABEL[outfit.audience] ?? "中性"}
+          </Text>
+        </View>
+        <View style={styles.metaRow}>
+          <Text style={styles.metaKey}>內容類型</Text>
+          <Text style={styles.metaValue}>
+            {(outfit.content_types?.length
+              ? outfit.content_types
+              : ["outfit"]
+            )
+              .map((value) => CONTENT_TYPE_LABEL[value] ?? "")
+              .filter(Boolean)
+              .join("、")}
           </Text>
         </View>
         <View style={styles.metaRow}>

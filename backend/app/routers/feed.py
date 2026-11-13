@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 from sqlalchemy.orm import Session, joinedload
 
 from ..auth import get_current_user
@@ -15,6 +15,9 @@ router = APIRouter(prefix="/feed", tags=["feed"])
 def get_feed(
     scope: str = Query("discover", pattern="^(discover|following)$"),
     audience: str = Query("all", pattern="^(all|male|female|unisex)$"),
+    content_type: str = Query(
+        "all", pattern="^(all|outfit|makeup|skincare|tutorial|review)$"
+    ),
     cursor: int | None = None,
     limit: int = Query(12, ge=1, le=50),
     user: User = Depends(get_current_user),
@@ -48,6 +51,14 @@ def get_feed(
 
     if audience != "all":
         query = query.filter(Outfit.audience == audience)
+
+    if content_type != "all":
+        query = query.filter(
+            text(
+                "EXISTS (SELECT 1 FROM json_each(outfits.content_types) "
+                "WHERE json_each.value = :content_type)"
+            ).bindparams(content_type=content_type)
+        )
 
     if cursor:
         query = query.filter(Outfit.id < cursor)

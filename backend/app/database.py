@@ -97,6 +97,34 @@ def _migrate():
             "UPDATE outfits SET audience='unisex' "
             "WHERE audience IS NULL OR audience=''"
         )
+        if "content_types" not in ocols:
+            cur.execute(
+                "ALTER TABLE outfits ADD COLUMN content_types JSON DEFAULT '[]'"
+            )
+            cur.execute("UPDATE outfits SET content_types='[]'")
+            cur.execute(
+                "UPDATE outfits SET content_types="
+                "json_insert(content_types,'$[#]','outfit') "
+                "WHERE id IN (SELECT DISTINCT outfit_id FROM outfit_items) "
+                "OR (photo_path IS NOT NULL AND photo_path != '')"
+            )
+            cur.execute(
+                "UPDATE outfits SET content_types="
+                "json_insert(content_types,'$[#]','makeup') "
+                "WHERE (makeup_photo_path IS NOT NULL AND makeup_photo_path != '') "
+                "OR id IN (SELECT op.outfit_id FROM outfit_products op "
+                "JOIN items i ON i.id=op.item_id WHERE i.item_type='makeup')"
+            )
+            cur.execute(
+                "UPDATE outfits SET content_types="
+                "json_insert(content_types,'$[#]','skincare') "
+                "WHERE id IN (SELECT op.outfit_id FROM outfit_products op "
+                "JOIN items i ON i.id=op.item_id WHERE i.item_type='skincare')"
+            )
+        cur.execute(
+            "UPDATE outfits SET content_types=json_array('outfit') "
+            "WHERE content_types IS NULL OR content_types='[]'"
+        )
         if "weather" not in ocols:
             cur.execute(
                 "ALTER TABLE outfits ADD COLUMN weather JSON DEFAULT '{}'"

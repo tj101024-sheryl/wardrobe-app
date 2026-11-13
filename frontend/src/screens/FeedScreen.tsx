@@ -7,6 +7,7 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  ScrollView,
   useWindowDimensions,
   Platform,
 } from "react-native";
@@ -16,10 +17,13 @@ import { http } from "../api";
 import { getWithCache } from "../cache";
 import {
   AUDIENCE_SHORT_LABEL,
+  CONTENT_TYPE_LABEL,
+  CONTENT_TYPE_OPTIONS,
   FeedResult,
   LikeResult,
   Outfit,
   OutfitAudience,
+  OutfitContentType,
   outfitRecorded,
 } from "../types";
 import { relativeDate } from "../date";
@@ -31,6 +35,7 @@ import { colors, radius, shadow, type } from "../theme";
 
 type Scope = "discover" | "following";
 type AudienceFilter = "all" | OutfitAudience;
+type ContentFilter = "all" | OutfitContentType;
 const PAGE_SIZE = 10;
 
 const AUDIENCE_TABS: { key: AudienceFilter; label: string }[] = [
@@ -38,6 +43,14 @@ const AUDIENCE_TABS: { key: AudienceFilter; label: string }[] = [
   { key: "male", label: "男生" },
   { key: "female", label: "女生" },
   { key: "unisex", label: "中性" },
+];
+
+const CONTENT_TABS: { key: ContentFilter; label: string }[] = [
+  { key: "all", label: "全部" },
+  ...CONTENT_TYPE_OPTIONS.map((option) => ({
+    key: option.key as ContentFilter,
+    label: option.label,
+  })),
 ];
 
 function FeedCard({
@@ -62,6 +75,11 @@ function FeedCard({
     relativeDate(outfit.date),
     outfit.occasion,
     AUDIENCE_SHORT_LABEL[outfit.audience] ?? "",
+    (outfit.content_types?.length ? outfit.content_types : ["outfit"])
+      .map((value) => CONTENT_TYPE_LABEL[value] ?? "")
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("／"),
     outfit.items.length > 0 ? `${outfit.items.length} 件` : "",
     outfit.products.length > 0 ? `${outfit.products.length} 樣` : "",
   ]
@@ -171,6 +189,7 @@ function FeedCard({
 export default function FeedScreen() {
   const [scope, setScope] = useState<Scope>("discover");
   const [audience, setAudience] = useState<AudienceFilter>("all");
+  const [contentType, setContentType] = useState<ContentFilter>("all");
   const [items, setItems] = useState<Outfit[]>([]);
   const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -189,8 +208,8 @@ export default function FeedScreen() {
     try {
       setError("");
       const result = await getWithCache<FeedResult>(
-        `feed:${scope}:${audience}`,
-        `/api/feed?scope=${scope}&audience=${audience}&limit=${PAGE_SIZE}`
+        `feed:${scope}:${audience}:${contentType}`,
+        `/api/feed?scope=${scope}&audience=${audience}&content_type=${contentType}&limit=${PAGE_SIZE}`
       );
       setItems(result.data.items);
       setNextCursor(result.data.next_cursor);
@@ -202,7 +221,7 @@ export default function FeedScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [scope, audience]);
+  }, [scope, audience, contentType]);
 
   useFocusEffect(
     useCallback(() => {
@@ -216,7 +235,7 @@ export default function FeedScreen() {
     setLoadingMore(true);
     try {
       const data = await http.get<FeedResult>(
-        `/api/feed?scope=${scope}&audience=${audience}&limit=${PAGE_SIZE}&cursor=${nextCursor}`
+        `/api/feed?scope=${scope}&audience=${audience}&content_type=${contentType}&limit=${PAGE_SIZE}&cursor=${nextCursor}`
       );
       setItems((prev) => {
         const known = new Set(prev.map((o) => o.id));
@@ -243,6 +262,16 @@ export default function FeedScreen() {
   function switchAudience(next: AudienceFilter) {
     if (next === audience) return;
     setAudience(next);
+    setItems([]);
+    setNextCursor(null);
+    setLoading(true);
+    setError("");
+    setOffline(false);
+  }
+
+  function switchContentType(next: ContentFilter) {
+    if (next === contentType) return;
+    setContentType(next);
     setItems([]);
     setNextCursor(null);
     setLoading(true);
@@ -367,6 +396,39 @@ export default function FeedScreen() {
           })}
         </View>
 
+        <View style={styles.contentRow}>
+          <Text style={styles.audienceLabel}>內容</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.contentChips}
+          >
+            {CONTENT_TABS.map((tab) => {
+              const active = contentType === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[
+                    styles.audienceChip,
+                    active && styles.audienceChipActive,
+                  ]}
+                  onPress={() => switchContentType(tab.key)}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[
+                      styles.audienceText,
+                      active && styles.audienceTextActive,
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
         {offline ? (
           <View style={styles.offlineBanner}>
             <Text style={styles.offlineText}>
@@ -400,6 +462,8 @@ export default function FeedScreen() {
     }
     const audienceWord =
       audience === "all" ? "" : `${AUDIENCE_SHORT_LABEL[audience]} `;
+    const contentWord =
+      contentType === "all" ? "" : `${CONTENT_TYPE_LABEL[contentType]} `;
     return (
       <View style={styles.empty}>
         <Text style={styles.emptyIcon}>
@@ -408,14 +472,16 @@ export default function FeedScreen() {
         <Text style={styles.emptyTitle}>
           {scope === "following"
             ? "追蹤的人還沒有動態"
-            : `還沒有${audienceWord}公開穿搭`}
+            : `還沒有${audienceWord}${contentWord}公開內容`}
         </Text>
         <Text style={styles.emptyText}>
           {scope === "following"
             ? "去探索看看吧，追蹤喜歡的人就會出現在這裡"
-            : audience === "all"
-            ? "把穿搭隱私設為公開，就會出現在大家的動態牆"
-            : "試試切換其他取向，或把穿搭設為公開"}
+            : contentType !== "all"
+            ? "試試切換其他內容類型，或把內容設為公開"
+            : audience !== "all"
+            ? "試試切換其他取向，或把內容設為公開"
+            : "把內容隱私設為公開，就會出現在大家的動態牆"}
         </Text>
       </View>
     );
@@ -534,8 +600,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     marginTop: -4,
+    marginBottom: 8,
+  },
+  contentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     marginBottom: 14,
   },
+  contentChips: { gap: 6, paddingRight: 8 },
   audienceLabel: {
     fontSize: 10,
     fontWeight: "700",

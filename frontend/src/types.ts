@@ -128,6 +128,12 @@ export type ScrapeResult = {
 export type OutfitStatus = "draft" | "scheduled" | "worn" | "canceled";
 export type OutfitVisibility = "public" | "followers" | "private";
 export type OutfitAudience = "male" | "female" | "unisex";
+export type OutfitContentType =
+  | "outfit"
+  | "makeup"
+  | "skincare"
+  | "tutorial"
+  | "review";
 
 export type OutfitItem = {
   id: number;
@@ -163,6 +169,7 @@ export type Outfit = {
   notes: string;
   occasion: string;
   audience: OutfitAudience;
+  content_types: OutfitContentType[];
   weather: Record<string, unknown> | null;
   layout_mode: string;
   canvas_data: Record<string, unknown>;
@@ -282,6 +289,25 @@ export const AUDIENCE_SHORT_LABEL: Record<string, string> = {
   female: "女生",
   unisex: "中性",
 };
+
+export const CONTENT_TYPE_LABEL: Record<string, string> = {
+  outfit: "穿搭",
+  makeup: "妝容",
+  skincare: "保養",
+  tutorial: "教學",
+  review: "產品推薦",
+};
+
+export const CONTENT_TYPE_OPTIONS: {
+  key: OutfitContentType;
+  label: string;
+}[] = [
+  { key: "outfit", label: "穿搭" },
+  { key: "makeup", label: "妝容" },
+  { key: "skincare", label: "保養" },
+  { key: "tutorial", label: "教學" },
+  { key: "review", label: "產品推薦" },
+];
 
 export function outfitRecorded(outfit: Outfit): boolean {
   return (

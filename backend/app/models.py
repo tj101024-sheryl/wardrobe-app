@@ -104,6 +104,7 @@ class Outfit(Base):
     status: Mapped[str] = mapped_column(String(20), default="draft")
     occasion: Mapped[str] = mapped_column(String(50), default="")
     audience: Mapped[str] = mapped_column(String(20), default="unisex")
+    content_types: Mapped[list] = mapped_column(JSON, default=list)
     weather: Mapped[dict] = mapped_column(JSON, default=dict)
     layout_mode: Mapped[str] = mapped_column(String(20), default="list")
     published_at: Mapped[datetime | None] = mapped_column(

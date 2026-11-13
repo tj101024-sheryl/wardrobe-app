@@ -191,6 +191,7 @@ class OutfitCreate(BaseModel):
     notes: str = ""
     occasion: str = ""
     audience: str = "unisex"
+    content_types: list[str] = Field(default_factory=list)
     visibility: str = "public"
     makeup_visibility: str = "public"
     photo_path: str | None = None
@@ -208,6 +209,7 @@ class OutfitUpdate(BaseModel):
     notes: str | None = None
     occasion: str | None = None
     audience: str | None = None
+    content_types: list[str] | None = None
     visibility: str | None = None
     makeup_visibility: str | None = None
     photo_path: str | None = None
@@ -229,6 +231,7 @@ class OutfitOut(BaseModel):
     notes: str
     occasion: str
     audience: str = "unisex"
+    content_types: list[str] = Field(default_factory=list)
     weather: dict | None = None
     layout_mode: str
     canvas_data: dict = Field(default_factory=dict)
