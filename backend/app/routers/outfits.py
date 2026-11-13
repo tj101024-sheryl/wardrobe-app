@@ -48,15 +48,35 @@ router = APIRouter(prefix="/outfits", tags=["outfits"])
 VISIBILITIES = {"public", "followers", "private"}
 AUDIENCES = {"male", "female", "unisex"}
 CONTENT_TYPES = {"outfit", "makeup", "skincare", "tutorial", "review"}
+STYLES = {
+    "japanese",
+    "korean",
+    "western",
+    "natural",
+    "special",
+    "street",
+    "minimal",
+    "sweet",
+    "sporty",
+    "casual",
+}
+LEVELS = {"beginner", "advanced"}
+BODY_TYPES = {"plus", "chubby", "petite", "tall", "pear", "apple", "standard"}
+MAKEUP_LOOKS = {"natural", "refined", "bold"}
+
+
+def _clean_values(values: list[str] | None, allowed: set[str]) -> list[str]:
+    if not values:
+        return []
+    cleaned: list[str] = []
+    for value in values:
+        if value in allowed and value not in cleaned:
+            cleaned.append(value)
+    return cleaned
 
 
 def _content_types(values: list[str] | None) -> list[str]:
-    if not values:
-        return ["outfit"]
-    cleaned: list[str] = []
-    for value in values:
-        if value in CONTENT_TYPES and value not in cleaned:
-            cleaned.append(value)
+    cleaned = _clean_values(values, CONTENT_TYPES)
     return cleaned or ["outfit"]
 
 
@@ -132,6 +152,11 @@ def _to_out(outfit: Outfit, viewer: User | None = None) -> OutfitOut:
     out.weather = outfit.weather or {}
     out.audience = outfit.audience or "unisex"
     out.content_types = _content_types(outfit.content_types)
+    out.styles = _clean_values(outfit.styles, STYLES)
+    out.level = outfit.level if outfit.level in LEVELS else "beginner"
+    out.body_types = _clean_values(outfit.body_types, BODY_TYPES)
+    out.makeup_looks = _clean_values(outfit.makeup_looks, MAKEUP_LOOKS)
+    out.video_url = outfit.video_url or None
     out.makeup_visibility = outfit.makeup_visibility or "public"
     out.photo_url = _photo_url(outfit.photo_path)
     out.makeup_photo_url = _photo_url(outfit.makeup_photo_path)
@@ -333,6 +358,11 @@ def create_outfit(
         occasion=data.occasion,
         audience=audience,
         content_types=_content_types(data.content_types),
+        styles=_clean_values(data.styles, STYLES),
+        level=data.level if data.level in LEVELS else "beginner",
+        body_types=_clean_values(data.body_types, BODY_TYPES),
+        makeup_looks=_clean_values(data.makeup_looks, MAKEUP_LOOKS),
+        video_url=(data.video_url or "").strip() or None,
         visibility=visibility,
         makeup_visibility=makeup_visibility,
         photo_path=_clean_photo(data.photo_path),
@@ -566,6 +596,17 @@ def update_outfit(
         raise HTTPException(400, "內容取向不正確")
     if "content_types" in payload:
         payload["content_types"] = _content_types(payload["content_types"])
+    for field, allowed in (
+        ("styles", STYLES),
+        ("body_types", BODY_TYPES),
+        ("makeup_looks", MAKEUP_LOOKS),
+    ):
+        if field in payload:
+            payload[field] = _clean_values(payload[field], allowed)
+    if "level" in payload and payload["level"] not in LEVELS:
+        raise HTTPException(400, "程度設定不正確")
+    if "video_url" in payload:
+        payload["video_url"] = (payload["video_url"] or "").strip() or None
 
     for key in ("photo_path", "makeup_photo_path"):
         if key in payload:

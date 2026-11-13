@@ -10,6 +10,7 @@ import {
   Platform,
   useWindowDimensions,
   Image,
+  Linking,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Heart, MessageCircle, Send } from "lucide-react-native";
@@ -243,6 +244,7 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
                   .filter(Boolean)
                   .join("／")}`
               : ""}
+            {outfit.video_url ? " · 影片" : ""}
           </Text>
         </View>
         <View
@@ -427,6 +429,21 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
           <Text style={styles.notesLabel}>筆記</Text>
           <Text style={styles.notesText}>{outfit.notes}</Text>
         </View>
+      ) : null}
+
+      {outfit.video_url ? (
+        <TouchableOpacity
+          style={styles.videoCard}
+          onPress={() => {
+            void Linking.openURL(outfit.video_url as string).catch(() => {});
+          }}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.videoTitle}>▶ 開啟影片</Text>
+          <Text style={styles.videoUrl} numberOfLines={1}>
+            {outfit.video_url}
+          </Text>
+        </TouchableOpacity>
       ) : null}
 
       {outfit.is_owner ? (
@@ -670,6 +687,15 @@ const styles = StyleSheet.create({
   },
   notesLabel: { ...type.label, color: colors.sub, marginBottom: 6 },
   notesText: { fontSize: 13, color: colors.text, lineHeight: 20 },
+  videoCard: {
+    marginTop: 14,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    padding: 16,
+    ...shadow.soft,
+  },
+  videoTitle: { fontSize: 14, fontWeight: "800", color: colors.text },
+  videoUrl: { fontSize: 10, color: colors.sub, marginTop: 5 },
   metaCard: {
     marginTop: 14,
     backgroundColor: colors.card,

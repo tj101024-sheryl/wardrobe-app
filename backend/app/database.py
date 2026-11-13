@@ -125,6 +125,33 @@ def _migrate():
             "UPDATE outfits SET content_types=json_array('outfit') "
             "WHERE content_types IS NULL OR content_types='[]'"
         )
+        new_outfit_columns = {
+            "styles": "JSON DEFAULT '[]'",
+            "level": "VARCHAR(20) DEFAULT 'beginner'",
+            "body_types": "JSON DEFAULT '[]'",
+            "makeup_looks": "JSON DEFAULT '[]'",
+            "video_url": "VARCHAR(500)",
+        }
+        for column, definition in new_outfit_columns.items():
+            if column not in ocols:
+                cur.execute(
+                    f"ALTER TABLE outfits ADD COLUMN {column} {definition}"
+                )
+        cur.execute(
+            "UPDATE outfits SET styles='[]' WHERE styles IS NULL OR styles=''"
+        )
+        cur.execute(
+            "UPDATE outfits SET body_types='[]' "
+            "WHERE body_types IS NULL OR body_types=''"
+        )
+        cur.execute(
+            "UPDATE outfits SET makeup_looks='[]' "
+            "WHERE makeup_looks IS NULL OR makeup_looks=''"
+        )
+        cur.execute(
+            "UPDATE outfits SET level='beginner' "
+            "WHERE level IS NULL OR level=''"
+        )
         if "weather" not in ocols:
             cur.execute(
                 "ALTER TABLE outfits ADD COLUMN weather JSON DEFAULT '{}'"

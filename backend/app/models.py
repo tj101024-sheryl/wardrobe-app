@@ -105,6 +105,11 @@ class Outfit(Base):
     occasion: Mapped[str] = mapped_column(String(50), default="")
     audience: Mapped[str] = mapped_column(String(20), default="unisex")
     content_types: Mapped[list] = mapped_column(JSON, default=list)
+    styles: Mapped[list] = mapped_column(JSON, default=list)
+    level: Mapped[str] = mapped_column(String(20), default="beginner")
+    body_types: Mapped[list] = mapped_column(JSON, default=list)
+    makeup_looks: Mapped[list] = mapped_column(JSON, default=list)
+    video_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     weather: Mapped[dict] = mapped_column(JSON, default=dict)
     layout_mode: Mapped[str] = mapped_column(String(20), default="list")
     published_at: Mapped[datetime | None] = mapped_column(

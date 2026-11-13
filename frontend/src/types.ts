@@ -134,6 +134,27 @@ export type OutfitContentType =
   | "skincare"
   | "tutorial"
   | "review";
+export type OutfitStyle =
+  | "japanese"
+  | "korean"
+  | "western"
+  | "natural"
+  | "special"
+  | "street"
+  | "minimal"
+  | "sweet"
+  | "sporty"
+  | "casual";
+export type OutfitLevel = "beginner" | "advanced";
+export type OutfitBodyType =
+  | "plus"
+  | "chubby"
+  | "petite"
+  | "tall"
+  | "pear"
+  | "apple"
+  | "standard";
+export type MakeupLook = "natural" | "refined" | "bold";
 
 export type OutfitItem = {
   id: number;
@@ -170,6 +191,11 @@ export type Outfit = {
   occasion: string;
   audience: OutfitAudience;
   content_types: OutfitContentType[];
+  styles: OutfitStyle[];
+  level: OutfitLevel;
+  body_types: OutfitBodyType[];
+  makeup_looks: MakeupLook[];
+  video_url: string | null;
   weather: Record<string, unknown> | null;
   layout_mode: string;
   canvas_data: Record<string, unknown>;
@@ -307,6 +333,89 @@ export const CONTENT_TYPE_OPTIONS: {
   { key: "skincare", label: "保養" },
   { key: "tutorial", label: "教學" },
   { key: "review", label: "產品推薦" },
+];
+
+export const STYLE_OPTIONS: { key: OutfitStyle; label: string }[] = [
+  { key: "japanese", label: "日系" },
+  { key: "korean", label: "韓系" },
+  { key: "western", label: "歐美" },
+  { key: "natural", label: "自然素顏感" },
+  { key: "special", label: "特殊妝" },
+  { key: "street", label: "街頭" },
+  { key: "minimal", label: "簡約" },
+  { key: "sweet", label: "甜美" },
+  { key: "sporty", label: "運動" },
+  { key: "casual", label: "休閒" },
+];
+
+export const STYLE_LABEL: Record<string, string> = Object.fromEntries(
+  STYLE_OPTIONS.map((option) => [option.key, option.label])
+);
+
+export const MAKEUP_STYLE_KEYS: OutfitStyle[] = [
+  "japanese",
+  "korean",
+  "western",
+  "natural",
+  "special",
+];
+
+export const OUTFIT_STYLE_KEYS: OutfitStyle[] = [
+  "japanese",
+  "korean",
+  "western",
+  "street",
+  "minimal",
+  "sweet",
+  "sporty",
+  "casual",
+];
+
+export const LEVEL_OPTIONS: { key: OutfitLevel; label: string }[] = [
+  { key: "beginner", label: "新手" },
+  { key: "advanced", label: "進階" },
+];
+
+export const LEVEL_LABEL: Record<string, string> = Object.fromEntries(
+  LEVEL_OPTIONS.map((option) => [option.key, option.label])
+);
+
+export const BODY_TYPE_OPTIONS: {
+  key: OutfitBodyType;
+  label: string;
+}[] = [
+  { key: "plus", label: "大尺碼" },
+  { key: "chubby", label: "微胖" },
+  { key: "petite", label: "小隻" },
+  { key: "tall", label: "高挑" },
+  { key: "pear", label: "梨形" },
+  { key: "apple", label: "蘋果形" },
+  { key: "standard", label: "標準" },
+];
+
+export const BODY_TYPE_LABEL: Record<string, string> = Object.fromEntries(
+  BODY_TYPE_OPTIONS.map((option) => [option.key, option.label])
+);
+
+export const MAKEUP_LOOK_OPTIONS: { key: MakeupLook; label: string }[] = [
+  { key: "natural", label: "自然" },
+  { key: "refined", label: "精緻" },
+  { key: "bold", label: "濃妝" },
+];
+
+export const MAKEUP_LOOK_LABEL: Record<string, string> = Object.fromEntries(
+  MAKEUP_LOOK_OPTIONS.map((option) => [option.key, option.label])
+);
+
+export const FILTER_OCCASIONS = [
+  "日常",
+  "約會",
+  "面試",
+  "派對",
+  "上班",
+  "運動",
+  "正式",
+  "旅行",
 ];
 
 export function outfitRecorded(outfit: Outfit): boolean {
@@ -869,7 +978,16 @@ export function categoryIcon(itemType: string, category: string): string {
 }
 
 export const SEASONS = ["春", "夏", "秋", "冬", "四季"];
-export const OCCASIONS = ["日常", "上班", "約會", "運動", "正式", "旅行"];
+export const OCCASIONS = [
+  "日常",
+  "上班",
+  "約會",
+  "運動",
+  "正式",
+  "旅行",
+  "面試",
+  "派對",
+];
 export const WEATHERS = ["晴", "陰", "雨", "冷", "熱", "風大"];
 export const STYLES = ["休閒", "韓系", "日系", "簡約", "個性", "甜美", "運動"];
 

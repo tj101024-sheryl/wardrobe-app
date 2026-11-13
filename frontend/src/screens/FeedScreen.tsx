@@ -1,185 +1,218 @@
-import React, { useCallback, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  FlatList,
+  ScrollView,
   ActivityIndicator,
   RefreshControl,
-  ScrollView,
+  TextInput,
+  Image,
+  Modal,
+  Pressable,
   useWindowDimensions,
   Platform,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import { Compass, Heart, MessageCircle, Send } from "lucide-react-native";
+import {
+  Bookmark,
+  Check,
+  ChevronDown,
+  Heart,
+  Search,
+  SlidersHorizontal,
+  X,
+} from "lucide-react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { http } from "../api";
 import { getWithCache } from "../cache";
 import {
   AUDIENCE_SHORT_LABEL,
-  CONTENT_TYPE_LABEL,
-  CONTENT_TYPE_OPTIONS,
+  BODY_TYPE_LABEL,
   FeedResult,
+  LEVEL_LABEL,
   LikeResult,
+  MAKEUP_LOOK_LABEL,
   Outfit,
-  OutfitAudience,
-  OutfitContentType,
-  outfitRecorded,
+  STYLE_LABEL,
+  fullUrl,
 } from "../types";
 import { relativeDate } from "../date";
-import { OutfitPreview } from "../components/OutfitCanvas";
-import CommentsModal from "../components/CommentsModal";
-import ShareSheet from "../components/ShareSheet";
+import FeedFilterSheet, {
+  EMPTY_FEED_FILTERS,
+  FeedDomain,
+  FeedFilterState,
+  filterCount,
+  filterKey,
+} from "../components/FeedFilterSheet";
 import { PHONE_MAX_WIDTH } from "../components/PhoneFrame";
 import { colors, radius, shadow, type } from "../theme";
 
 type Scope = "discover" | "following";
-type AudienceFilter = "all" | OutfitAudience;
-type ContentFilter = "all" | OutfitContentType;
-const PAGE_SIZE = 10;
+type FormatFilter = "all" | "photo" | "video" | "tutorial";
+type SortFilter = "latest" | "popular";
 
-const AUDIENCE_TABS: { key: AudienceFilter; label: string }[] = [
+const PAGE_SIZE = 12;
+const SAVED_KEY = "feed_saved_filter";
+
+const DOMAIN_TABS: { key: FeedDomain; label: string }[] = [
   { key: "all", label: "全部" },
-  { key: "male", label: "男生" },
-  { key: "female", label: "女生" },
-  { key: "unisex", label: "中性" },
+  { key: "outfit", label: "穿搭" },
+  { key: "makeup", label: "妝容" },
+  { key: "skincare", label: "保養" },
+  { key: "review", label: "產品推薦" },
 ];
 
-const CONTENT_TABS: { key: ContentFilter; label: string }[] = [
+const FORMAT_TABS: { key: FormatFilter; label: string }[] = [
   { key: "all", label: "全部" },
-  ...CONTENT_TYPE_OPTIONS.map((option) => ({
-    key: option.key as ContentFilter,
-    label: option.label,
-  })),
+  { key: "photo", label: "圖文" },
+  { key: "video", label: "影片" },
+  { key: "tutorial", label: "教學" },
 ];
+
+const SORT_OPTIONS: { key: SortFilter; label: string }[] = [
+  { key: "latest", label: "最新" },
+  { key: "popular", label: "最熱" },
+];
+
+const PASTELS = [
+  "#EFE7DE",
+  "#F5E3E7",
+  "#E4ECF4",
+  "#E7EFE6",
+  "#F3ECD7",
+  "#EAE4F2",
+];
+
+const CARD_HEIGHTS = [230, 205, 245, 215, 258, 225];
+
+function coverHeight(outfit: Outfit): number {
+  return CARD_HEIGHTS[outfit.id % CARD_HEIGHTS.length];
+}
+
+function coverLabel(outfit: Outfit): string {
+  const types = outfit.content_types ?? [];
+  if (types.includes("makeup")) return "妝容照片";
+  if (types.includes("skincare")) return "保養照片";
+  return "穿搭照片";
+}
+
+function formatBadge(outfit: Outfit): string {
+  if (outfit.video_url) return "影片";
+  if ((outfit.content_types ?? []).includes("tutorial")) return "教學";
+  return "";
+}
+
+function buildQuery(params: Record<string, string | undefined>): string {
+  return Object.entries(params)
+    .filter(([, value]) => !!value)
+    .map(([key, value]) => `${key}=${encodeURIComponent(value as string)}`)
+    .join("&");
+}
+
+function filtersToLabels(filters: FeedFilterState): string[] {
+  const labels: string[] = [];
+  filters.audiences.forEach((value) => {
+    labels.push(AUDIENCE_SHORT_LABEL[value] ?? "");
+  });
+  filters.styles.forEach((value) => {
+    labels.push(STYLE_LABEL[value] ?? "");
+  });
+  if (filters.level !== "all") {
+    labels.push(LEVEL_LABEL[filters.level] ?? "");
+  }
+  filters.occasions.forEach((value) => labels.push(value));
+  filters.bodyTypes.forEach((value) => {
+    labels.push(BODY_TYPE_LABEL[value] ?? "");
+  });
+  filters.makeupLooks.forEach((value) => {
+    labels.push(MAKEUP_LOOK_LABEL[value] ?? "");
+  });
+  return labels.filter(Boolean);
+}
 
 function FeedCard({
   outfit,
   width,
   onOpen,
-  onUser,
   onLike,
-  onComment,
-  onShare,
 }: {
   outfit: Outfit;
   width: number;
   onOpen: () => void;
-  onUser: () => void;
   onLike: () => void;
-  onComment: () => void;
-  onShare: () => void;
 }) {
-  const imageSize = width - 28;
-  const meta = [
-    relativeDate(outfit.date),
-    outfit.occasion,
-    AUDIENCE_SHORT_LABEL[outfit.audience] ?? "",
-    (outfit.content_types?.length ? outfit.content_types : ["outfit"])
-      .map((value) => CONTENT_TYPE_LABEL[value] ?? "")
-      .filter(Boolean)
-      .slice(0, 2)
-      .join("／"),
-    outfit.items.length > 0 ? `${outfit.items.length} 件` : "",
-    outfit.products.length > 0 ? `${outfit.products.length} 樣` : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const image = outfit.photo_url || outfit.makeup_photo_url;
+  const badge = formatBadge(outfit);
+  const level = outfit.level === "advanced" ? "進階" : "新手";
+  const meta =
+    outfit.products.length > 0
+      ? `用到 ${outfit.products.length} 項產品`
+      : outfit.items.length > 0
+      ? `${outfit.items.length} 件單品`
+      : "";
 
   return (
     <View style={[styles.card, { width }]}>
-      <TouchableOpacity
-        style={styles.ownerRow}
-        onPress={onUser}
-        activeOpacity={0.8}
-      >
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {outfit.owner.username.slice(0, 1).toUpperCase()}
-          </Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.ownerName} numberOfLines={1}>
-            {outfit.owner.username}
-          </Text>
-          <Text style={styles.ownerMeta} numberOfLines={1}>
-            {meta}
-          </Text>
-        </View>
-        {outfit.is_owner ? (
-          <View style={styles.mineChip}>
-            <Text style={styles.mineChipText}>我的</Text>
-          </View>
-        ) : null}
-      </TouchableOpacity>
-
       <TouchableOpacity onPress={onOpen} activeOpacity={0.9}>
-        <View style={styles.photoWrap}>
-          {outfitRecorded(outfit) ? (
-            <OutfitPreview outfit={outfit} size={imageSize} />
+        <View
+          style={[
+            styles.cover,
+            {
+              height: coverHeight(outfit),
+              backgroundColor: PASTELS[outfit.id % PASTELS.length],
+            },
+          ]}
+        >
+          {image ? (
+            <Image
+              source={{ uri: fullUrl(image) }}
+              style={styles.coverImage}
+              resizeMode="cover"
+            />
           ) : (
-            <View
-              style={[
-                styles.emptyPhoto,
-                { width: imageSize, height: imageSize },
-              ]}
-            >
-              <Text style={styles.emptyPhotoIcon}>👗</Text>
-              <Text style={styles.emptyPhotoText}>還沒有照片</Text>
-            </View>
+            <Text style={styles.coverPlaceholder}>{coverLabel(outfit)}</Text>
           )}
+          {badge ? (
+            <View style={styles.darkBadge}>
+              <Text style={styles.darkBadgeText}>{badge}</Text>
+            </View>
+          ) : null}
+          <View style={styles.lightBadge}>
+            <Text style={styles.lightBadgeText}>{level}</Text>
+          </View>
         </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={onOpen} activeOpacity={0.85}>
         <Text style={styles.cardTitle} numberOfLines={2}>
           {outfit.title || `${relativeDate(outfit.date)}的穿搭`}
         </Text>
-        {outfit.notes ? (
-          <Text style={styles.cardNotes} numberOfLines={2}>
-            {outfit.notes}
-          </Text>
-        ) : null}
       </TouchableOpacity>
-
-      <View style={styles.actionRow}>
+      <View style={styles.cardMetaRow}>
+        <Text style={styles.cardMeta} numberOfLines={1}>
+          {outfit.owner.username}
+          {meta ? ` · ${meta}` : ""}
+        </Text>
         <TouchableOpacity
-          style={styles.action}
+          style={styles.likeBtn}
           onPress={onLike}
           activeOpacity={0.75}
         >
           <Heart
-            size={19}
+            size={15}
             color={outfit.liked_by_me ? colors.danger : colors.sub}
             fill={outfit.liked_by_me ? colors.danger : "transparent"}
             strokeWidth={2}
           />
-          <Text
-            style={[
-              styles.actionText,
-              outfit.liked_by_me && styles.actionTextActive,
-            ]}
-          >
-            {outfit.like_count > 0 ? outfit.like_count : "讚"}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.action}
-          onPress={onComment}
-          activeOpacity={0.75}
-        >
-          <MessageCircle size={19} color={colors.sub} strokeWidth={2} />
-          <Text style={styles.actionText}>
-            {outfit.comment_count > 0 ? outfit.comment_count : "留言"}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.action}
-          onPress={onShare}
-          activeOpacity={0.75}
-        >
-          <Send size={18} color={colors.sub} strokeWidth={2} />
-          <Text style={styles.actionText}>分享</Text>
+          {outfit.like_count > 0 ? (
+            <Text style={styles.likeCount}>{outfit.like_count}</Text>
+          ) : null}
         </TouchableOpacity>
       </View>
     </View>
@@ -188,8 +221,11 @@ function FeedCard({
 
 export default function FeedScreen() {
   const [scope, setScope] = useState<Scope>("discover");
-  const [audience, setAudience] = useState<AudienceFilter>("all");
-  const [contentType, setContentType] = useState<ContentFilter>("all");
+  const [domain, setDomain] = useState<FeedDomain>("all");
+  const [format, setFormat] = useState<FormatFilter>("all");
+  const [sort, setSort] = useState<SortFilter>("latest");
+  const [filters, setFilters] = useState<FeedFilterState>(EMPTY_FEED_FILTERS);
+
   const [items, setItems] = useState<Outfit[]>([]);
   const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -197,19 +233,71 @@ export default function FeedScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [offline, setOffline] = useState(false);
-  const [commentTarget, setCommentTarget] = useState<number | null>(null);
-  const [shareTarget, setShareTarget] = useState<number | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [query, setQuery] = useState("");
+  const [savedFilter, setSavedFilter] = useState<FeedFilterState | null>(null);
 
   const { width } = useWindowDimensions();
   const frame = Math.min(width, PHONE_MAX_WIDTH);
-  const cardW = frame - 32;
+  const cardW = (frame - 32 - 12) / 2;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(SAVED_KEY);
+        if (!cancelled && raw) {
+          const parsed = JSON.parse(raw) as Partial<FeedFilterState>;
+          setSavedFilter({ ...EMPTY_FEED_FILTERS, ...parsed });
+        }
+      } catch {
+        // 快取失敗不影響瀏覽
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadFirst = useCallback(async () => {
+    void reloadKey;
     try {
       setError("");
+      const body = buildQuery({
+        scope,
+        content_type: domain === "all" ? undefined : domain,
+        format: format === "all" ? undefined : format,
+        sort: sort === "latest" ? undefined : sort,
+        audiences:
+          filters.audiences.length > 0
+            ? filters.audiences.join(",")
+            : undefined,
+        styles:
+          filters.styles.length > 0 ? filters.styles.join(",") : undefined,
+        level: filters.level === "all" ? undefined : filters.level,
+        occasions:
+          filters.occasions.length > 0
+            ? filters.occasions.join(",")
+            : undefined,
+        body_types:
+          filters.bodyTypes.length > 0
+            ? filters.bodyTypes.join(",")
+            : undefined,
+        makeup_looks:
+          filters.makeupLooks.length > 0
+            ? filters.makeupLooks.join(",")
+            : undefined,
+        q: query || undefined,
+        limit: String(PAGE_SIZE),
+      });
       const result = await getWithCache<FeedResult>(
-        `feed:${scope}:${audience}:${contentType}`,
-        `/api/feed?scope=${scope}&audience=${audience}&content_type=${contentType}&limit=${PAGE_SIZE}`
+        `feed:${body}`,
+        `/api/feed?${body}`
       );
       setItems(result.data.items);
       setNextCursor(result.data.next_cursor);
@@ -221,7 +309,7 @@ export default function FeedScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [scope, audience, contentType]);
+  }, [scope, domain, format, sort, filters, query, reloadKey]);
 
   useFocusEffect(
     useCallback(() => {
@@ -230,16 +318,50 @@ export default function FeedScreen() {
     }, [loadFirst])
   );
 
+  const resetList = useCallback(() => {
+    setItems([]);
+    setNextCursor(null);
+    setLoading(true);
+    setError("");
+    setOffline(false);
+    setReloadKey((value) => value + 1);
+  }, []);
+
   async function loadMore() {
-    if (!nextCursor || loadingMore) return;
+    if (!nextCursor || loadingMore || sort !== "latest") return;
     setLoadingMore(true);
     try {
-      const data = await http.get<FeedResult>(
-        `/api/feed?scope=${scope}&audience=${audience}&content_type=${contentType}&limit=${PAGE_SIZE}&cursor=${nextCursor}`
-      );
+      const body = buildQuery({
+        scope,
+        content_type: domain === "all" ? undefined : domain,
+        format: format === "all" ? undefined : format,
+        audiences:
+          filters.audiences.length > 0
+            ? filters.audiences.join(",")
+            : undefined,
+        styles:
+          filters.styles.length > 0 ? filters.styles.join(",") : undefined,
+        level: filters.level === "all" ? undefined : filters.level,
+        occasions:
+          filters.occasions.length > 0
+            ? filters.occasions.join(",")
+            : undefined,
+        body_types:
+          filters.bodyTypes.length > 0
+            ? filters.bodyTypes.join(",")
+            : undefined,
+        makeup_looks:
+          filters.makeupLooks.length > 0
+            ? filters.makeupLooks.join(",")
+            : undefined,
+        q: query || undefined,
+        cursor: String(nextCursor),
+        limit: String(PAGE_SIZE),
+      });
+      const data = await http.get<FeedResult>(`/api/feed?${body}`);
       setItems((prev) => {
-        const known = new Set(prev.map((o) => o.id));
-        return [...prev, ...data.items.filter((o) => !known.has(o.id))];
+        const known = new Set(prev.map((row) => row.id));
+        return [...prev, ...data.items.filter((row) => !known.has(row.id))];
       });
       setNextCursor(data.next_cursor);
     } catch (e: any) {
@@ -252,31 +374,66 @@ export default function FeedScreen() {
   function switchScope(next: Scope) {
     if (next === scope) return;
     setScope(next);
-    setItems([]);
-    setNextCursor(null);
-    setLoading(true);
-    setError("");
-    setOffline(false);
+    resetList();
   }
 
-  function switchAudience(next: AudienceFilter) {
-    if (next === audience) return;
-    setAudience(next);
-    setItems([]);
-    setNextCursor(null);
-    setLoading(true);
-    setError("");
-    setOffline(false);
+  function switchDomain(next: FeedDomain) {
+    if (next === domain) return;
+    setDomain(next);
+    setFilters((prev) => ({
+      ...prev,
+      bodyTypes:
+        next === "outfit" || next === "all" ? prev.bodyTypes : [],
+      makeupLooks:
+        next === "makeup" || next === "all" ? prev.makeupLooks : [],
+    }));
+    resetList();
   }
 
-  function switchContentType(next: ContentFilter) {
-    if (next === contentType) return;
-    setContentType(next);
-    setItems([]);
-    setNextCursor(null);
-    setLoading(true);
-    setError("");
-    setOffline(false);
+  function switchFormat(next: FormatFilter) {
+    if (next === format) return;
+    setFormat(next);
+    resetList();
+  }
+
+  function applyFilters(next: FeedFilterState) {
+    setFilters(next);
+    setFilterOpen(false);
+    resetList();
+  }
+
+  function clearFilters() {
+    setFilters({ ...EMPTY_FEED_FILTERS });
+    setQuery("");
+    setSearchText("");
+    resetList();
+  }
+
+  function applySearch() {
+    setQuery(searchText.trim());
+    setSearchOpen(false);
+    resetList();
+  }
+
+  const clearSearch = useCallback(() => {
+    setSearchText("");
+    setQuery("");
+    resetList();
+  }, [resetList]);
+
+  async function saveCurrentFilter() {
+    try {
+      await AsyncStorage.setItem(SAVED_KEY, JSON.stringify(filters));
+      setSavedFilter(filters);
+    } catch {
+      // 忽略儲存失敗
+    }
+  }
+
+  function applySavedFilter() {
+    if (!savedFilter) return;
+    setFilters(savedFilter);
+    resetList();
   }
 
   async function toggleLike(outfit: Outfit) {
@@ -317,29 +474,183 @@ export default function FeedScreen() {
     }
   }
 
-  const handleCommentCount = useCallback(
-    (outfitId: number, count: number) => {
-      setItems((prev) =>
-        prev.map((row) =>
-          row.id === outfitId ? { ...row, comment_count: count } : row
-        )
-      );
-    },
-    []
-  );
+  const activeChips = useMemo(() => {
+    const chips: { key: string; label: string; remove: () => void }[] = [];
+    filters.audiences.forEach((value) => {
+      chips.push({
+        key: `audience-${value}`,
+        label: AUDIENCE_SHORT_LABEL[value] ?? value,
+        remove: () =>
+          setFilters((prev) => ({
+            ...prev,
+            audiences: prev.audiences.filter((x) => x !== value),
+          })),
+      });
+    });
+    filters.styles.forEach((value) => {
+      chips.push({
+        key: `style-${value}`,
+        label: STYLE_LABEL[value] ?? value,
+        remove: () =>
+          setFilters((prev) => ({
+            ...prev,
+            styles: prev.styles.filter((x) => x !== value),
+          })),
+      });
+    });
+    if (filters.level !== "all") {
+      chips.push({
+        key: "level",
+        label: LEVEL_LABEL[filters.level] ?? filters.level,
+        remove: () =>
+          setFilters((prev) => ({ ...prev, level: "all" })),
+      });
+    }
+    filters.occasions.forEach((value) => {
+      chips.push({
+        key: `occasion-${value}`,
+        label: value,
+        remove: () =>
+          setFilters((prev) => ({
+            ...prev,
+            occasions: prev.occasions.filter((x) => x !== value),
+          })),
+      });
+    });
+    filters.bodyTypes.forEach((value) => {
+      chips.push({
+        key: `body-${value}`,
+        label: BODY_TYPE_LABEL[value] ?? value,
+        remove: () =>
+          setFilters((prev) => ({
+            ...prev,
+            bodyTypes: prev.bodyTypes.filter((x) => x !== value),
+          })),
+      });
+    });
+    filters.makeupLooks.forEach((value) => {
+      chips.push({
+        key: `look-${value}`,
+        label: MAKEUP_LOOK_LABEL[value] ?? value,
+        remove: () =>
+          setFilters((prev) => ({
+            ...prev,
+            makeupLooks: prev.makeupLooks.filter((x) => x !== value),
+          })),
+      });
+    });
+    if (query) {
+      chips.push({
+        key: "query",
+        label: `搜尋：${query}`,
+        remove: clearSearch,
+      });
+    }
+    return chips;
+  }, [filters, query, clearSearch]);
 
-  function renderHeader() {
+  const facetCount = filterCount(filters);
+  const savedMatches =
+    !!savedFilter && filterKey(savedFilter) === filterKey(filters);
+
+  const columns = useMemo(() => {
+    const cols: Outfit[][] = [[], []];
+    const heights = [0, 0];
+    items.forEach((outfit) => {
+      const column = heights[0] <= heights[1] ? 0 : 1;
+      cols[column].push(outfit);
+      heights[column] += coverHeight(outfit) + 96;
+    });
+    return cols;
+  }, [items]);
+
+  function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const { layoutMeasurement, contentOffset, contentSize } =
+      event.nativeEvent;
+    if (
+      layoutMeasurement.height + contentOffset.y >=
+      contentSize.height - 260
+    ) {
+      void loadMore();
+    }
+  }
+
+  function renderEmpty() {
+    if (loading) {
+      return (
+        <ActivityIndicator color={colors.text} style={{ marginTop: 48 }} />
+      );
+    }
+    const hasFilter = facetCount > 0 || !!query;
     return (
-      <View>
+      <View style={styles.empty}>
+        <Text style={styles.emptyIcon}>🔎</Text>
+        <Text style={styles.emptyTitle}>
+          {hasFilter ? "找不到符合的內容" : "這個分類還沒有公開內容"}
+        </Text>
+        <Text style={styles.emptyText}>
+          {hasFilter
+            ? "試試切換領域、格式，或清除一些篩選"
+            : "換個領域或格式看看"}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void loadFirst();
+            }}
+            tintColor={colors.sub}
+          />
+        }
+        onScroll={handleScroll}
+        scrollEventThrottle={200}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>動態</Text>
             <Text style={styles.sub}>看看別人今天穿什麼，也分享你的</Text>
           </View>
-          <View style={styles.headerIcon}>
-            <Compass size={20} color={colors.text} strokeWidth={2} />
-          </View>
+          <TouchableOpacity
+            style={styles.searchBtn}
+            onPress={() => setSearchOpen((value) => !value)}
+            activeOpacity={0.8}
+            accessibilityLabel="搜尋"
+          >
+            <Search size={19} color={colors.text} strokeWidth={2} />
+          </TouchableOpacity>
         </View>
+
+        {searchOpen ? (
+          <View style={styles.searchRow}>
+            <Search size={15} color={colors.faint} strokeWidth={2} />
+            <TextInput
+              style={styles.searchInput}
+              value={searchText}
+              onChangeText={setSearchText}
+              onSubmitEditing={applySearch}
+              placeholder="搜尋穿搭、妝容、保養…"
+              placeholderTextColor={colors.faint}
+              returnKeyType="search"
+              autoFocus
+            />
+            {searchText ? (
+              <TouchableOpacity onPress={clearSearch} activeOpacity={0.7}>
+                <X size={15} color={colors.sub} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
 
         <View style={styles.segment}>
           {(
@@ -369,24 +680,24 @@ export default function FeedScreen() {
           })}
         </View>
 
-        <View style={styles.audienceRow}>
-          <Text style={styles.audienceLabel}>取向</Text>
-          {AUDIENCE_TABS.map((tab) => {
-            const active = audience === tab.key;
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.domainChips}
+        >
+          {DOMAIN_TABS.map((tab) => {
+            const active = domain === tab.key;
             return (
               <TouchableOpacity
                 key={tab.key}
-                style={[
-                  styles.audienceChip,
-                  active && styles.audienceChipActive,
-                ]}
-                onPress={() => switchAudience(tab.key)}
+                style={[styles.domainChip, active && styles.domainChipActive]}
+                onPress={() => switchDomain(tab.key)}
                 activeOpacity={0.85}
               >
                 <Text
                   style={[
-                    styles.audienceText,
-                    active && styles.audienceTextActive,
+                    styles.domainText,
+                    active && styles.domainTextActive,
                   ]}
                 >
                   {tab.label}
@@ -394,40 +705,124 @@ export default function FeedScreen() {
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
 
-        <View style={styles.contentRow}>
-          <Text style={styles.audienceLabel}>內容</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.contentChips}
+        <View style={styles.toolbar}>
+          <TouchableOpacity
+            style={[
+              styles.filterBtn,
+              facetCount > 0 && styles.filterBtnActive,
+            ]}
+            onPress={() => setFilterOpen(true)}
+            activeOpacity={0.85}
           >
-            {CONTENT_TABS.map((tab) => {
-              const active = contentType === tab.key;
+            <SlidersHorizontal size={14} color={colors.text} strokeWidth={2} />
+            <Text style={styles.filterText}>篩選</Text>
+            {facetCount > 0 ? (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>{facetCount}</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+
+          <View style={styles.formatTabs}>
+            {FORMAT_TABS.map((tab) => {
+              const active = format === tab.key;
               return (
                 <TouchableOpacity
                   key={tab.key}
-                  style={[
-                    styles.audienceChip,
-                    active && styles.audienceChipActive,
-                  ]}
-                  onPress={() => switchContentType(tab.key)}
-                  activeOpacity={0.85}
+                  style={styles.formatTab}
+                  onPress={() => switchFormat(tab.key)}
+                  activeOpacity={0.8}
                 >
                   <Text
                     style={[
-                      styles.audienceText,
-                      active && styles.audienceTextActive,
+                      styles.formatText,
+                      active && styles.formatTextActive,
                     ]}
                   >
                     {tab.label}
                   </Text>
+                  <View
+                    style={[
+                      styles.formatLine,
+                      active && styles.formatLineActive,
+                    ]}
+                  />
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </View>
+
+          <TouchableOpacity
+            style={styles.sortBtn}
+            onPress={() => setSortOpen(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.sortText}>
+              {sort === "latest" ? "最新" : "最熱"}
+            </Text>
+            <ChevronDown size={13} color={colors.sub} />
+          </TouchableOpacity>
         </View>
+
+        {activeChips.length > 0 ? (
+          <View style={styles.activeRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.activeScroll}
+              contentContainerStyle={styles.activeChips}
+            >
+              {activeChips.map((chip) => (
+                <TouchableOpacity
+                  key={chip.key}
+                  style={styles.activeChip}
+                  onPress={chip.remove}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.activeChipText}>{chip.label}</Text>
+                  <X size={11} color={colors.text} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity onPress={clearFilters} activeOpacity={0.7}>
+              <Text style={styles.clearText}>清除</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {facetCount > 0 ? (
+          <View style={styles.savedBanner}>
+            <Text style={styles.savedText}>
+              下次想快速找到這類內容？
+            </Text>
+            <TouchableOpacity
+              style={styles.savedBtn}
+              onPress={() => void saveCurrentFilter()}
+              activeOpacity={0.85}
+            >
+              <Bookmark size={12} color={colors.accent} />
+              <Text style={styles.savedBtnText}>
+                {savedMatches ? "已儲存" : "儲存這次篩選"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : savedFilter ? (
+          <View style={styles.savedBanner}>
+            <Text style={styles.savedText} numberOfLines={1}>
+              上次儲存：{filtersToLabels(savedFilter).join(" · ") || "自訂篩選"}
+            </Text>
+            <TouchableOpacity
+              style={styles.savedBtn}
+              onPress={applySavedFilter}
+              activeOpacity={0.85}
+            >
+              <Bookmark size={12} color={colors.accent} />
+              <Text style={styles.savedBtnText}>套用</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {offline ? (
           <View style={styles.offlineBanner}>
@@ -450,102 +845,86 @@ export default function FeedScreen() {
             </TouchableOpacity>
           </View>
         ) : null}
-      </View>
-    );
-  }
 
-  function renderEmpty() {
-    if (loading) {
-      return (
-        <ActivityIndicator color={colors.text} style={{ marginTop: 48 }} />
-      );
-    }
-    const audienceWord =
-      audience === "all" ? "" : `${AUDIENCE_SHORT_LABEL[audience]} `;
-    const contentWord =
-      contentType === "all" ? "" : `${CONTENT_TYPE_LABEL[contentType]} `;
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyIcon}>
-          {scope === "following" ? "👀" : "🌍"}
-        </Text>
-        <Text style={styles.emptyTitle}>
-          {scope === "following"
-            ? "追蹤的人還沒有動態"
-            : `還沒有${audienceWord}${contentWord}公開內容`}
-        </Text>
-        <Text style={styles.emptyText}>
-          {scope === "following"
-            ? "去探索看看吧，追蹤喜歡的人就會出現在這裡"
-            : contentType !== "all"
-            ? "試試切換其他內容類型，或把內容設為公開"
-            : audience !== "all"
-            ? "試試切換其他取向，或把內容設為公開"
-            : "把內容隱私設為公開，就會出現在大家的動態牆"}
-        </Text>
-      </View>
-    );
-  }
-
-  return (
-    <>
-      <FlatList
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        data={items}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={({ item }) => (
-          <FeedCard
-            outfit={item}
-            width={cardW}
-            onOpen={() => router.push(`/outfit/${item.id}`)}
-            onUser={() => router.push(`/user/${item.owner.id}`)}
-            onLike={() => void toggleLike(item)}
-            onComment={() => setCommentTarget(item.id)}
-            onShare={() => setShareTarget(item.id)}
-          />
+        {loading ? (
+          <ActivityIndicator color={colors.text} style={{ marginTop: 48 }} />
+        ) : items.length === 0 ? (
+          renderEmpty()
+        ) : (
+          <View style={styles.masonry}>
+            {columns.map((column, columnIndex) => (
+              <View key={columnIndex} style={styles.column}>
+                {column.map((outfit) => (
+                  <FeedCard
+                    key={outfit.id}
+                    outfit={outfit}
+                    width={cardW}
+                    onOpen={() => router.push(`/outfit/${outfit.id}`)}
+                    onLike={() => void toggleLike(outfit)}
+                  />
+                ))}
+              </View>
+            ))}
+          </View>
         )}
-        ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
-        ListHeaderComponent={renderHeader()}
-        ListEmptyComponent={renderEmpty()}
-        ListFooterComponent={
-          loadingMore ? (
-            <ActivityIndicator
-              color={colors.sub}
-              style={{ marginVertical: 20 }}
-            />
-          ) : items.length > 0 && !nextCursor ? (
-            <Text style={styles.footerText}>已經看到底了</Text>
-          ) : (
-            <View style={{ height: 12 }} />
-          )
-        }
-        onEndReached={() => void loadMore()}
-        onEndReachedThreshold={0.4}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              void loadFirst();
-            }}
-            tintColor={colors.sub}
+
+        {loadingMore ? (
+          <ActivityIndicator
+            color={colors.sub}
+            style={{ marginVertical: 20 }}
           />
-        }
-        showsVerticalScrollIndicator={false}
+        ) : items.length > 0 && !nextCursor ? (
+          <Text style={styles.footerText}>已經看到底了</Text>
+        ) : null}
+      </ScrollView>
+
+      <FeedFilterSheet
+        visible={filterOpen}
+        domain={domain}
+        value={filters}
+        onClose={() => setFilterOpen(false)}
+        onApply={applyFilters}
       />
 
-      <CommentsModal
-        outfitId={commentTarget}
-        visible={commentTarget !== null}
-        onClose={() => setCommentTarget(null)}
-        onCountChange={handleCommentCount}
-      />
-      <ShareSheet
-        outfitId={shareTarget}
-        visible={shareTarget !== null}
-        onClose={() => setShareTarget(null)}
-      />
+      <Modal
+        visible={sortOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSortOpen(false)}
+      >
+        <Pressable
+          style={styles.sortBackdrop}
+          onPress={() => setSortOpen(false)}
+        >
+          <Pressable style={styles.sortCard} onPress={() => {}}>
+            <Text style={styles.sortTitle}>排序</Text>
+            {SORT_OPTIONS.map((option) => (
+              <TouchableOpacity
+                key={option.key}
+                style={styles.sortOption}
+                onPress={() => {
+                  setSort(option.key);
+                  setSortOpen(false);
+                  resetList();
+                }}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.sortOptionText,
+                    sort === option.key && styles.sortOptionActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+                {sort === option.key ? (
+                  <Check size={16} color={colors.text} />
+                ) : null}
+              </TouchableOpacity>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </>
   );
 }
@@ -565,10 +944,10 @@ const styles = StyleSheet.create({
   },
   title: { ...type.display, color: colors.text },
   sub: { ...type.caption, color: colors.sub, marginTop: 5 },
-  headerIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+  searchBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
@@ -576,17 +955,34 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 4,
   },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    backgroundColor: colors.card,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 12,
+    color: colors.text,
+  },
   segment: {
     flexDirection: "row",
     backgroundColor: colors.chip,
     borderRadius: radius.full,
     padding: 3,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   segmentItem: {
     flex: 1,
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: radius.full,
   },
   segmentItemActive: {
@@ -595,40 +991,123 @@ const styles = StyleSheet.create({
   },
   segmentText: { fontSize: 12, fontWeight: "700", color: colors.sub },
   segmentTextActive: { color: "#fff" },
-  audienceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: -4,
-    marginBottom: 8,
-  },
-  contentRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 14,
-  },
-  contentChips: { gap: 6, paddingRight: 8 },
-  audienceLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.faint,
-    marginRight: 2,
-  },
-  audienceChip: {
+  domainChips: { gap: 7, paddingRight: 8, paddingBottom: 2 },
+  domainChip: {
     borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  audienceChipActive: {
+  domainChipActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  audienceText: { fontSize: 10, fontWeight: "700", color: colors.sub },
-  audienceTextActive: { color: "#fff" },
+  domainText: { fontSize: 11, fontWeight: "700", color: colors.sub },
+  domainTextActive: { color: "#fff" },
+  toolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  filterBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    borderRadius: radius.full,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  filterBtnActive: {
+    borderColor: colors.text,
+  },
+  filterText: { fontSize: 11, fontWeight: "700", color: colors.text },
+  filterBadge: {
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  filterBadgeText: { fontSize: 9, fontWeight: "800", color: colors.text },
+  formatTabs: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  formatTab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+  formatText: { fontSize: 11, fontWeight: "600", color: colors.sub },
+  formatTextActive: { color: colors.text, fontWeight: "800" },
+  formatLine: {
+    width: 18,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "transparent",
+    marginTop: 4,
+  },
+  formatLineActive: { backgroundColor: colors.accent },
+  sortBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingVertical: 6,
+  },
+  sortText: { fontSize: 11, fontWeight: "700", color: colors.sub },
+  activeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  activeScroll: { flex: 1 },
+  activeChips: { gap: 6, paddingRight: 8 },
+  activeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  activeChipText: { fontSize: 10, fontWeight: "600", color: colors.text },
+  clearText: { fontSize: 10, fontWeight: "700", color: colors.sub },
+  savedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#f4f1ea",
+    borderRadius: radius.md,
+    paddingLeft: 12,
+    paddingRight: 8,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  savedText: { flex: 1, fontSize: 10, color: colors.sub },
+  savedBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  savedBtnText: { fontSize: 9, fontWeight: "700", color: "#fff" },
   offlineBanner: {
     marginBottom: 12,
     backgroundColor: colors.accentSoft,
@@ -649,85 +1128,64 @@ const styles = StyleSheet.create({
   },
   errorText: { color: colors.danger, flex: 1, fontSize: 11, lineHeight: 16 },
   retry: { color: colors.text, fontWeight: "700", fontSize: 11 },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    padding: 14,
-    ...shadow.card,
-  },
-  ownerRow: {
+  masonry: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-    marginBottom: 11,
+    gap: 12,
+    paddingTop: 4,
   },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.primarySoft,
+  column: { flex: 1, gap: 16 },
+  card: {},
+  cover: {
+    borderRadius: radius.md,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: { fontSize: 14, fontWeight: "800", color: colors.text },
-  ownerName: { fontSize: 13, fontWeight: "700", color: colors.text },
-  ownerMeta: { fontSize: 10, color: colors.sub, marginTop: 2 },
-  mineChip: {
-    backgroundColor: colors.chip,
+  coverImage: { width: "100%", height: "100%" },
+  coverPlaceholder: { fontSize: 11, color: colors.sub },
+  darkBadge: {
+    position: "absolute",
+    left: 8,
+    top: 8,
+    backgroundColor: "rgba(26,26,26,0.92)",
     borderRadius: radius.full,
     paddingHorizontal: 9,
     paddingVertical: 4,
   },
-  mineChipText: { fontSize: 9, fontWeight: "700", color: colors.sub },
-  photoWrap: {
-    borderRadius: radius.md,
-    overflow: "hidden",
-    backgroundColor: "#f0efec",
+  darkBadgeText: { fontSize: 9, fontWeight: "700", color: "#fff" },
+  lightBadge: {
+    position: "absolute",
+    right: 8,
+    top: 8,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderRadius: radius.full,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
-  emptyPhoto: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f0efec",
-    gap: 6,
-  },
-  emptyPhotoIcon: { fontSize: 42 },
-  emptyPhotoText: { fontSize: 11, color: colors.faint },
+  lightBadgeText: { fontSize: 9, fontWeight: "700", color: colors.text },
   cardTitle: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "800",
     color: colors.text,
-    marginTop: 11,
-    lineHeight: 20,
+    marginTop: 7,
+    lineHeight: 18,
   },
-  cardNotes: {
-    fontSize: 11,
-    color: colors.sub,
-    marginTop: 4,
-    lineHeight: 17,
-  },
-  actionRow: {
+  cardMetaRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
+    justifyContent: "space-between",
+    gap: 6,
+    marginTop: 3,
   },
-  action: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    marginRight: 24,
-    paddingVertical: 2,
-  },
-  actionText: { fontSize: 11, color: colors.sub, fontWeight: "600" },
-  actionTextActive: { color: colors.danger },
+  cardMeta: { flex: 1, fontSize: 10, color: colors.sub },
+  likeBtn: { flexDirection: "row", alignItems: "center", gap: 2 },
+  likeCount: { fontSize: 9, color: colors.sub, fontWeight: "600" },
   empty: {
     alignItems: "center",
     paddingVertical: 46,
     paddingHorizontal: 24,
   },
-  emptyIcon: { fontSize: 40 },
+  emptyIcon: { fontSize: 38 },
   emptyTitle: {
     ...type.heading,
     color: colors.text,
@@ -747,4 +1205,30 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginVertical: 20,
   },
+  sortBackdrop: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  sortCard: {
+    width: "100%",
+    maxWidth: 340,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    padding: 16,
+    ...shadow.raised,
+  },
+  sortTitle: { ...type.heading, color: colors.text, marginBottom: 8 },
+  sortOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  sortOptionText: { fontSize: 13, color: colors.sub },
+  sortOptionActive: { color: colors.text, fontWeight: "800" },
 });

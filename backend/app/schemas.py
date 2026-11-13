@@ -192,6 +192,11 @@ class OutfitCreate(BaseModel):
     occasion: str = ""
     audience: str = "unisex"
     content_types: list[str] = Field(default_factory=list)
+    styles: list[str] = Field(default_factory=list)
+    level: str = "beginner"
+    body_types: list[str] = Field(default_factory=list)
+    makeup_looks: list[str] = Field(default_factory=list)
+    video_url: str | None = None
     visibility: str = "public"
     makeup_visibility: str = "public"
     photo_path: str | None = None
@@ -210,6 +215,11 @@ class OutfitUpdate(BaseModel):
     occasion: str | None = None
     audience: str | None = None
     content_types: list[str] | None = None
+    styles: list[str] | None = None
+    level: str | None = None
+    body_types: list[str] | None = None
+    makeup_looks: list[str] | None = None
+    video_url: str | None = None
     visibility: str | None = None
     makeup_visibility: str | None = None
     photo_path: str | None = None
@@ -232,6 +242,11 @@ class OutfitOut(BaseModel):
     occasion: str
     audience: str = "unisex"
     content_types: list[str] = Field(default_factory=list)
+    styles: list[str] = Field(default_factory=list)
+    level: str = "beginner"
+    body_types: list[str] = Field(default_factory=list)
+    makeup_looks: list[str] = Field(default_factory=list)
+    video_url: str | None = None
     weather: dict | None = None
     layout_mode: str
     canvas_data: dict = Field(default_factory=dict)

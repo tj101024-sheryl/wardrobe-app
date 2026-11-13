@@ -18,14 +18,22 @@ import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { http } from "../api";
 import {
   AUDIENCE_SHORT_LABEL,
+  BODY_TYPE_OPTIONS,
   CATEGORY_LABEL,
   CONTENT_TYPE_OPTIONS,
   CanvasTransform,
   Item,
+  LEVEL_OPTIONS,
+  MAKEUP_LOOK_OPTIONS,
   OCCASIONS,
   Outfit,
   OUTFIT_ROLES,
+  OutfitBodyType,
   OutfitContentType,
+  OutfitLevel,
+  OutfitStyle,
+  MakeupLook,
+  STYLE_OPTIONS,
   outfitRoleOf,
   usageLabel,
   VISIBILITY_LABEL,
@@ -155,6 +163,11 @@ export default function OutfitEditorScreen() {
   const [contentTypes, setContentTypes] = useState<OutfitContentType[]>([
     "outfit",
   ]);
+  const [styleTags, setStyleTags] = useState<OutfitStyle[]>([]);
+  const [level, setLevel] = useState<OutfitLevel>("beginner");
+  const [bodyTypes, setBodyTypes] = useState<OutfitBodyType[]>([]);
+  const [makeupLooks, setMakeupLooks] = useState<MakeupLook[]>([]);
+  const [videoUrl, setVideoUrl] = useState("");
   const [visibility, setVisibility] = useState("public");
   const [makeupVisibility, setMakeupVisibility] = useState("public");
   const [selected, setSelected] = useState<number[]>([]);
@@ -196,6 +209,11 @@ export default function OutfitEditorScreen() {
         setContentTypes(
           outfit.content_types?.length ? outfit.content_types : ["outfit"]
         );
+        setStyleTags(outfit.styles ?? []);
+        setLevel(outfit.level ?? "beginner");
+        setBodyTypes(outfit.body_types ?? []);
+        setMakeupLooks(outfit.makeup_looks ?? []);
+        setVideoUrl(outfit.video_url ?? "");
         setVisibility(outfit.visibility);
         setMakeupVisibility(outfit.makeup_visibility || "public");
         setSelected(outfit.items.map((row) => row.item_id));
@@ -413,6 +431,30 @@ export default function OutfitEditorScreen() {
     );
   }
 
+  function toggleStyle(value: OutfitStyle) {
+    setStyleTags((prev) =>
+      prev.includes(value)
+        ? prev.filter((v) => v !== value)
+        : [...prev, value]
+    );
+  }
+
+  function toggleBodyType(value: OutfitBodyType) {
+    setBodyTypes((prev) =>
+      prev.includes(value)
+        ? prev.filter((v) => v !== value)
+        : [...prev, value]
+    );
+  }
+
+  function toggleMakeupLook(value: MakeupLook) {
+    setMakeupLooks((prev) =>
+      prev.includes(value)
+        ? prev.filter((v) => v !== value)
+        : [...prev, value]
+    );
+  }
+
   function shiftDate(delta: number) {
     const base = parseYmd(dateStr) ?? new Date();
     setDateStr(ymd(addDays(base, delta)));
@@ -508,6 +550,11 @@ export default function OutfitEditorScreen() {
         occasion,
         audience,
         content_types: contentTypes,
+        styles: styleTags,
+        level,
+        body_types: bodyTypes,
+        makeup_looks: makeupLooks,
+        video_url: videoUrl.trim() || null,
         visibility,
         makeup_visibility: makeupVisibility,
         layout_mode: canvasMode ? "canvas" : "list",
@@ -936,6 +983,104 @@ export default function OutfitEditorScreen() {
             );
           })}
         </View>
+
+        <Text style={styles.label}>風格（可多選）</Text>
+        <View style={styles.wrapRow}>
+          {STYLE_OPTIONS.map((option) => {
+            const active = styleTags.includes(option.key);
+            return (
+              <TouchableOpacity
+                key={option.key}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => toggleStyle(option.key)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[styles.chipText, active && styles.chipTextActive]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={styles.label}>程度</Text>
+        <View style={styles.wrapRow}>
+          {LEVEL_OPTIONS.map((option) => {
+            const active = level === option.key;
+            return (
+              <TouchableOpacity
+                key={option.key}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => setLevel(option.key)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[styles.chipText, active && styles.chipTextActive]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={styles.label}>身型（可多選）</Text>
+        <View style={styles.wrapRow}>
+          {BODY_TYPE_OPTIONS.map((option) => {
+            const active = bodyTypes.includes(option.key);
+            return (
+              <TouchableOpacity
+                key={option.key}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => toggleBodyType(option.key)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[styles.chipText, active && styles.chipTextActive]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={styles.label}>妝感（可多選）</Text>
+        <View style={styles.wrapRow}>
+          {MAKEUP_LOOK_OPTIONS.map((option) => {
+            const active = makeupLooks.includes(option.key);
+            return (
+              <TouchableOpacity
+                key={option.key}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => toggleMakeupLook(option.key)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[styles.chipText, active && styles.chipTextActive]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={styles.label}>影片連結（選填）</Text>
+        <Text style={styles.privacyHint}>
+          貼上 YouTube、IG 或 MP4 連結，動態牆的「影片」分頁就會收錄這篇。
+        </Text>
+        <TextInput
+          style={styles.input}
+          value={videoUrl}
+          onChangeText={setVideoUrl}
+          placeholder="https://…"
+          placeholderTextColor={colors.faint}
+          autoCapitalize="none"
+          keyboardType="url"
+        />
 
         <Text style={styles.label}>場合</Text>
         <View style={styles.wrapRow}>
