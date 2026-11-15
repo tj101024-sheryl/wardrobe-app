@@ -23,11 +23,35 @@ function resolveHost(): string {
     }
     return "127.0.0.1";
   }
-  // 換網路時不用再手改 IP：優先跟隨 Expo dev server 的位址
-  return metroHost() ?? "140.118.219.6";
+  // 換網路時不用再手改 IP：優先跟隨 Expo dev server 的區域網路位址。
+  // 若 Expo 給的是 localhost，手機其實連不到電腦，改用目前的區網 IP。
+  const host = metroHost();
+  if (host && host !== "localhost" && host !== "127.0.0.1") {
+    return host;
+  }
+  return "140.118.219.6";
 }
 
-export const API_BASE = `http://${resolveHost()}:8000`;
+const AUTO_API_BASE = `http://${resolveHost()}:8000`;
+let apiBaseOverride: string | null = null;
+
+export function getApiBase(): string {
+  return apiBaseOverride || AUTO_API_BASE;
+}
+
+export function getAutoApiBase(): string {
+  return AUTO_API_BASE;
+}
+
+export function normalizeApiBase(value: string): string {
+  const trimmed = (value || "").trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+}
+
+export function setApiBaseOverride(value: string | null): void {
+  apiBaseOverride = normalizeApiBase(value || "") || null;
+}
 
 export type Item = {
   id: number;
@@ -994,5 +1018,5 @@ export const STYLES = ["休閒", "韓系", "日系", "簡約", "個性", "甜美
 export function fullUrl(path: string): string {
   if (!path) return "";
   if (path.startsWith("http")) return path;
-  return `${API_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
+  return `${getApiBase()}${path.startsWith("/") ? "" : "/"}${path}`;
 }

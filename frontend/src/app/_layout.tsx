@@ -45,6 +45,10 @@ export default function RootLayout() {
             name="settings/notifications"
             options={{ title: "穿搭提醒" }}
           />
+          <Stack.Screen
+            name="settings/connection"
+            options={{ title: "後端連線" }}
+          />
         </Stack>
       </PhoneFrame>
     </AuthProvider>

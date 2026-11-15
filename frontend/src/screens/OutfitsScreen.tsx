@@ -203,13 +203,20 @@ export default function OutfitsScreen() {
       {error ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity
-            onPress={() => {
-              void load();
-            }}
-          >
-            <Text style={styles.retry}>重試</Text>
-          </TouchableOpacity>
+          <View style={styles.errorActions}>
+            <TouchableOpacity
+              onPress={() => {
+                void load();
+              }}
+            >
+              <Text style={styles.retry}>重試</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push("/settings/connection")}
+            >
+              <Text style={styles.connectionLink}>連線設定</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : null}
 
@@ -1147,6 +1154,13 @@ const styles = StyleSheet.create({
   },
   errorText: { color: colors.danger, flex: 1, fontSize: 13 },
   retry: { color: colors.text, fontWeight: "700", fontSize: 13 },
+  errorActions: { alignItems: "flex-end", gap: 3 },
+  connectionLink: {
+    color: colors.danger,
+    fontWeight: "700",
+    fontSize: 10,
+    textDecorationLine: "underline",
+  },
   offlineBanner: {
     marginHorizontal: 18,
     marginTop: 8,

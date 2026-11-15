@@ -1,4 +1,4 @@
-import { API_BASE } from "./types";
+import { getApiBase } from "./types";
 
 let token: string | null = null;
 
@@ -49,7 +49,7 @@ export async function api<T>(
 
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    res = await fetch(`${getApiBase()}${path}`, { ...options, headers });
   } catch {
     throw new ApiError(0, "無法連線到後端，請確認伺服器已啟動");
   }

@@ -835,14 +835,21 @@ export default function FeedScreen() {
         {error ? (
           <View style={styles.errorBox}>
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity
-              onPress={() => {
-                setLoading(true);
-                void loadFirst();
-              }}
-            >
-              <Text style={styles.retry}>重試</Text>
-            </TouchableOpacity>
+            <View style={styles.errorActions}>
+              <TouchableOpacity
+                onPress={() => {
+                  setLoading(true);
+                  void loadFirst();
+                }}
+              >
+                <Text style={styles.retry}>重試</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push("/settings/connection")}
+              >
+                <Text style={styles.connectionLink}>連線設定</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ) : null}
 
@@ -1128,6 +1135,13 @@ const styles = StyleSheet.create({
   },
   errorText: { color: colors.danger, flex: 1, fontSize: 11, lineHeight: 16 },
   retry: { color: colors.text, fontWeight: "700", fontSize: 11 },
+  errorActions: { alignItems: "flex-end", gap: 3 },
+  connectionLink: {
+    color: colors.danger,
+    fontWeight: "700",
+    fontSize: 9,
+    textDecorationLine: "underline",
+  },
   masonry: {
     flexDirection: "row",
     gap: 12,

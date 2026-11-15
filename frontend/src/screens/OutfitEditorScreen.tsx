@@ -17,7 +17,7 @@ import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { http, getWithRetry } from "../api";
 import {
-  API_BASE,
+  getApiBase,
   AUDIENCE_SHORT_LABEL,
   BODY_TYPE_OPTIONS,
   CATEGORY_LABEL,
@@ -621,17 +621,26 @@ export default function OutfitEditorScreen() {
           <View style={styles.errorBox}>
             <View style={{ flex: 1 }}>
               <Text style={styles.errorMain}>{error}</Text>
-              <Text style={styles.errorHint}>目前 API：{API_BASE}</Text>
+              <Text style={styles.errorHint}>目前 API：{getApiBase()}</Text>
             </View>
-            <TouchableOpacity
-              style={styles.retryBtn}
-              onPress={() => {
-                void load();
-              }}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.retryText}>重試</Text>
-            </TouchableOpacity>
+            <View style={styles.errorActions}>
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={() => {
+                  void load();
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.retryText}>重試</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.connectionLink}
+                onPress={() => router.push("/settings/connection")}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.connectionLinkText}>連線設定</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ) : null}
 
@@ -1609,6 +1618,14 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   retryText: { fontSize: 11, fontWeight: "700", color: colors.danger },
+  errorActions: { alignItems: "center", gap: 6 },
+  connectionLink: { paddingVertical: 2 },
+  connectionLinkText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.danger,
+    textDecorationLine: "underline",
+  },
   footer: {
     position: "absolute",
     left: 0,
