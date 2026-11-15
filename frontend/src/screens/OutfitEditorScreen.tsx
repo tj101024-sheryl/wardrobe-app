@@ -15,8 +15,9 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
-import { http } from "../api";
+import { http, getWithRetry } from "../api";
 import {
+  API_BASE,
   AUDIENCE_SHORT_LABEL,
   BODY_TYPE_OPTIONS,
   CATEGORY_LABEL,
@@ -197,10 +198,10 @@ export default function OutfitEditorScreen() {
   const load = useCallback(async () => {
     try {
       setError("");
-      const all = await http.get<Item[]>("/api/items");
+      const all = await getWithRetry<Item[]>("/api/items");
       setItems(all);
       if (editId) {
-        const outfit = await http.get<Outfit>(`/api/outfits/${editId}`);
+        const outfit = await getWithRetry<Outfit>(`/api/outfits/${editId}`);
         setDateStr(outfit.date || initialDate);
         setTitle(outfit.title);
         setNotes(outfit.notes);
@@ -616,7 +617,23 @@ export default function OutfitEditorScreen() {
         contentContainerStyle={{ padding: 18, paddingBottom: 140 }}
         keyboardShouldPersistTaps="handled"
       >
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? (
+          <View style={styles.errorBox}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.errorMain}>{error}</Text>
+              <Text style={styles.errorHint}>目前 API：{API_BASE}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={() => {
+                void load();
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.retryText}>重試</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         <Text style={styles.sectionTitle}>哪一天</Text>
         <View style={styles.dateCard}>
@@ -1572,7 +1589,26 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 15,
   },
-  error: { color: colors.danger, fontSize: 13, marginBottom: 10 },
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fdeeee",
+    borderRadius: radius.md,
+    padding: 12,
+    marginBottom: 10,
+  },
+  errorMain: { color: colors.danger, fontSize: 12, fontWeight: "600" },
+  errorHint: { color: colors.danger, fontSize: 9, marginTop: 3, opacity: 0.8 },
+  retryBtn: {
+    backgroundColor: colors.card,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: "#f3c7c7",
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+  },
+  retryText: { fontSize: 11, fontWeight: "700", color: colors.danger },
   footer: {
     position: "absolute",
     left: 0,

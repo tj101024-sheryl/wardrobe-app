@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Heart, MessageCircle, Send } from "lucide-react-native";
-import { http, postWithRetry } from "../api";
+import { http, getWithRetry, postWithRetry } from "../api";
 import {
   AUDIENCE_LABEL,
   CATEGORY_LABEL,
@@ -68,7 +68,7 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
     async (quiet = false): Promise<boolean> => {
       try {
         setError("");
-        const data = await http.get<Outfit>(`/api/outfits/${outfitId}`);
+        const data = await getWithRetry<Outfit>(`/api/outfits/${outfitId}`);
         setOutfit(data);
         return true;
       } catch (e: any) {
@@ -344,7 +344,20 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
           <Text style={styles.noticeText}>{notice}</Text>
         </View>
       ) : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? (
+        <View style={styles.errorRow}>
+          <Text style={styles.error}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => {
+              void load();
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.retryText}>重試</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {outfit.is_owner && isFuture ? (
         <View style={styles.infoBanner}>
@@ -670,7 +683,22 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   noticeText: { color: "#3d6b3d", fontSize: 12, lineHeight: 18 },
-  error: { color: colors.danger, marginTop: 12, fontSize: 13 },
+  errorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 12,
+  },
+  error: { color: colors.danger, flex: 1, fontSize: 13 },
+  retryBtn: {
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+  },
+  retryText: { fontSize: 11, fontWeight: "700", color: colors.text },
   infoBanner: {
     marginTop: 14,
     backgroundColor: colors.accentSoft,

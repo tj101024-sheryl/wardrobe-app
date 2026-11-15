@@ -74,6 +74,29 @@ export const http = {
 };
 
 /**
+ * GET 失敗時若為網路錯誤，稍後再試一次。
+ * 適合頁面初次載入，避免手機短暫切換網路時直接顯示紅字。
+ */
+export async function getWithRetry<T>(
+  path: string,
+  retries = 1
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await http.get<T>(path);
+    } catch (error) {
+      lastError = error;
+      const isNetwork =
+        error instanceof ApiError && error.status === 0;
+      if (!isNetwork || attempt === retries) break;
+      await wait(800);
+    }
+  }
+  throw lastError;
+}
+
+/**
  * 用於「完成穿搭」這類可重複呼叫的寫入：
  * 第一次若遇到暫時斷線，稍等後再試一次；後端以每日唯一 log 防重複。
  */
