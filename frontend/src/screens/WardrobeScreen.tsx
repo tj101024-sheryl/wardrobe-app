@@ -37,6 +37,8 @@ export default function WardrobeScreen() {
   // 右側選中的第三層分類 key；null＝整個第二層
   const [leafKey, setLeafKey] = useState<string | null>(null);
   const [efficacyFilter, setEfficacyFilter] = useState("");
+  const [brandFilter, setBrandFilter] = useState("");
+  const [brandOpen, setBrandOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -68,6 +70,7 @@ export default function WardrobeScreen() {
     setRootId(null);
     setLeafKey(null);
     setEfficacyFilter("");
+    setBrandFilter("");
     setManage(false);
   }
 
@@ -159,13 +162,35 @@ export default function WardrobeScreen() {
     }, [load])
   );
 
-  // 後端只做 item_type / 功效篩選；分類範圍在前端用樹組出來
+  // 後端只做 item_type / 功效篩選；分類與品牌範圍在前端組出來
   const visibleItems = useMemo(() => {
-    if (!rootId) return items;
+    const brandItems = brandFilter
+      ? items.filter(
+          (item) =>
+            (item.brand || "").trim().toUpperCase() ===
+            brandFilter.trim().toUpperCase()
+        )
+      : items;
+    if (!rootId) return brandItems;
     const keys = keysOfBranch(rootId);
-    if (leafKey) return items.filter((i) => i.category === leafKey);
-    return items.filter((i) => keys.includes(i.category));
-  }, [items, rootId, leafKey, keysOfBranch]);
+    if (leafKey) return brandItems.filter((i) => i.category === leafKey);
+    return brandItems.filter((i) => keys.includes(i.category));
+  }, [items, rootId, leafKey, keysOfBranch, brandFilter]);
+
+  const brandCounts = useMemo(() => {
+    const map = new Map<string, { brand: string; count: number }>();
+    items.forEach((item) => {
+      const label = (item.brand || "").trim();
+      if (!label) return;
+      const key = label.toUpperCase();
+      const current = map.get(key);
+      if (current) current.count += 1;
+      else map.set(key, { brand: label, count: 1 });
+    });
+    return Array.from(map.values()).sort(
+      (a, b) => b.count - a.count || a.brand.localeCompare(b.brand)
+    );
+  }, [items]);
 
   const mergeTargets = useMemo(() => {
     if (!mergeSource) return [];
@@ -305,23 +330,46 @@ export default function WardrobeScreen() {
                 {leafKey ? ` / ${labelOf(leafKey)}` : ""}
               </Text>
             </TouchableOpacity>
-            {showFilter ? (
+            <View style={styles.paneFilters}>
               <TouchableOpacity
-                style={[styles.filterBtn, efficacyFilter && styles.filterBtnActive]}
-                onPress={() => setFilterOpen(true)}
+                style={[
+                  styles.filterBtn,
+                  brandFilter && styles.filterBtnActive,
+                ]}
+                onPress={() => setBrandOpen(true)}
                 activeOpacity={0.8}
               >
                 <Text
                   style={[
                     styles.filterText,
-                    efficacyFilter && styles.filterTextActive,
+                    brandFilter && styles.filterTextActive,
                   ]}
                   numberOfLines={1}
                 >
-                  {efficacyFilter ? `功效 · ${efficacyFilter}` : "篩選 ▼"}
+                  {brandFilter || "品牌 ▼"}
                 </Text>
               </TouchableOpacity>
-            ) : null}
+              {showFilter ? (
+                <TouchableOpacity
+                  style={[
+                    styles.filterBtn,
+                    efficacyFilter && styles.filterBtnActive,
+                  ]}
+                  onPress={() => setFilterOpen(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.filterText,
+                      efficacyFilter && styles.filterTextActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {efficacyFilter ? `功效 · ${efficacyFilter}` : "功效 ▼"}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
 
           {selectedRoot && root && root.children.length > 0 ? (
@@ -468,6 +516,11 @@ export default function WardrobeScreen() {
                     <Text numberOfLines={1} style={styles.cardTitle}>
                       {item.name || "未命名"}
                     </Text>
+                    {item.brand ? (
+                      <Text numberOfLines={1} style={styles.cardBrand}>
+                        {item.brand}
+                      </Text>
+                    ) : null}
                     {item.wear_count > 0 ? (
                       <Text style={styles.cardMeta} numberOfLines={1}>
                         {fullLabelOf(item.category)}
@@ -646,6 +699,106 @@ export default function WardrobeScreen() {
         </Pressable>
       </Modal>
 
+      {/* 品牌統計與篩選 */}
+      <Modal
+        visible={brandOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBrandOpen(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setBrandOpen(false)}
+        >
+          <Pressable style={styles.menuCard} onPress={() => {}}>
+            <Text style={styles.menuTitle}>品牌統計</Text>
+            <Text style={styles.brandSummary}>
+              {brandCounts[0]
+                ? `最常買：${brandCounts[0].brand} · ${brandCounts[0].count} 件`
+                : "還沒有品牌資料"}
+            </Text>
+            <ScrollView style={styles.brandList}>
+              <TouchableOpacity
+                style={[
+                  styles.brandRow,
+                  !brandFilter && styles.brandRowActive,
+                ]}
+                onPress={() => {
+                  setBrandFilter("");
+                  setBrandOpen(false);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.brandName,
+                    !brandFilter && styles.brandNameActive,
+                  ]}
+                >
+                  全部品牌
+                </Text>
+                <Text
+                  style={[
+                    styles.brandCount,
+                    !brandFilter && styles.brandCountActive,
+                  ]}
+                >
+                  {items.length}
+                </Text>
+              </TouchableOpacity>
+              {brandCounts.map((row) => {
+                const active =
+                  brandFilter.trim().toUpperCase() ===
+                  row.brand.trim().toUpperCase();
+                return (
+                  <TouchableOpacity
+                    key={row.brand}
+                    style={[styles.brandRow, active && styles.brandRowActive]}
+                    onPress={() => {
+                      setBrandFilter(row.brand);
+                      setBrandOpen(false);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.brandName,
+                        active && styles.brandNameActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {row.brand}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.brandCount,
+                        active && styles.brandCountActive,
+                      ]}
+                    >
+                      {row.count}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+              {brandCounts.length === 0 ? (
+                <Text style={styles.menuEmpty}>
+                  新增時填寫品牌，就會出現在這裡
+                </Text>
+              ) : null}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.filterClear}
+              onPress={() => {
+                setBrandFilter("");
+                setBrandOpen(false);
+              }}
+            >
+              <Text style={styles.filterClearText}>清除品牌篩選</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* 功效篩選 */}
       <Modal
         visible={filterOpen}
@@ -785,6 +938,12 @@ const styles = StyleSheet.create({
   },
   crumb: { flex: 1 },
   crumbText: { ...type.heading, fontSize: 15, color: colors.text },
+  paneFilters: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
   filterBtn: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -867,6 +1026,28 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 8,
   },
+  brandSummary: {
+    fontSize: 11,
+    color: colors.sub,
+    paddingHorizontal: 18,
+    paddingBottom: 10,
+  },
+  brandList: { maxHeight: 360 },
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  brandRowActive: { backgroundColor: colors.primary },
+  brandName: { flex: 1, fontSize: 13, color: colors.text, fontWeight: "600" },
+  brandNameActive: { color: "#fff", fontWeight: "800" },
+  brandCount: { fontSize: 12, color: colors.sub, fontWeight: "700" },
+  brandCountActive: { color: "#fff" },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -972,6 +1153,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     lineHeight: 20,
+  },
+  cardBrand: {
+    color: colors.sub,
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 2,
   },
   cardMeta: {
     color: colors.sub,

@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { http } from "../api";
-import { ITEM_TYPES, ScrapeResult, joinEfficacy } from "../types";
+import { ITEM_TYPES, BRAND_SUGGESTIONS, ScrapeResult, joinEfficacy } from "../types";
 import { CategoryPicker, EfficacyPicker } from "../components/CategoryPickers";
 import { colors, radius, shadow, type } from "../theme";
 
@@ -26,6 +26,7 @@ export default function ScrapeScreen() {
   const [category, setCategory] = useState("");
   const [efficacy, setEfficacy] = useState<string[]>([]);
   const [name, setName] = useState("");
+  const [brand, setBrand] = useState("");
   const [color, setColor] = useState("");
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -117,6 +118,7 @@ export default function ScrapeScreen() {
           item_type: itemType,
           category,
           color: color.trim(),
+          brand: brand.trim(),
           efficacy: joinEfficacy(efficacy),
           source_page: result.url,
         });
@@ -326,6 +328,43 @@ export default function ScrapeScreen() {
               placeholder="例如：白色棉T、保濕粉底液"
               placeholderTextColor={colors.faint}
             />
+            <Text style={styles.fieldLabel}>品牌（選填）</Text>
+            <TextInput
+              style={styles.fieldInput}
+              value={brand}
+              onChangeText={setBrand}
+              placeholder="例如：UNIQLO"
+              placeholderTextColor={colors.faint}
+              autoCapitalize="characters"
+            />
+            <View style={styles.brandChips}>
+              {BRAND_SUGGESTIONS.map((suggestion) => {
+                const active =
+                  brand.trim().toUpperCase() === suggestion;
+                return (
+                  <TouchableOpacity
+                    key={suggestion}
+                    style={[
+                      styles.brandChip,
+                      active && styles.brandChipActive,
+                    ]}
+                    onPress={() =>
+                      setBrand(active ? "" : suggestion)
+                    }
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.brandChipText,
+                        active && styles.brandChipTextActive,
+                      ]}
+                    >
+                      {suggestion}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
             <Text style={styles.fieldLabel}>顏色（選填）</Text>
             <TextInput
               style={styles.fieldInput}
@@ -565,6 +604,26 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 14,
   },
+  brandChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 8,
+  },
+  brandChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    borderRadius: radius.full,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+  },
+  brandChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  brandChipText: { fontSize: 10, color: colors.text, fontWeight: "600" },
+  brandChipTextActive: { color: "#fff" },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     backgroundColor: colors.chip,

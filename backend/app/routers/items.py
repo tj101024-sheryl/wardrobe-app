@@ -56,6 +56,7 @@ def list_items(
         like = f"%{q}%"
         query = query.filter(
             (Item.name.like(like))
+            | (Item.brand.like(like))
             | (Item.color.like(like))
             | (Item.style.like(like))
             | (Item.tags.cast(str).like(like))
@@ -78,6 +79,7 @@ async def create_item(
     weather: str = Form(""),
     style: str = Form(""),
     expiry: str = Form(""),
+    brand: str = Form(""),
     efficacy: str = Form(""),
     tags: str = Form(""),
     source_url: str = Form(""),
@@ -86,8 +88,8 @@ async def create_item(
 ):
     return await _save_upload(
         file, name, item_type, category, color, color_family, color_hex,
-        season, occasion, weather, style, expiry, efficacy, tags, source_url,
-        user, db,
+        season, occasion, weather, style, expiry, brand, efficacy, tags,
+        source_url, user, db,
     )
 
 
@@ -104,6 +106,7 @@ async def _save_upload(
     weather: str,
     style: str,
     expiry: str,
+    brand: str,
     efficacy: str,
     tags: str,
     source_url: str,
@@ -138,6 +141,7 @@ async def _save_upload(
         weather=weather,
         style=style,
         expiry=expiry,
+        brand=brand,
         efficacy=efficacy,
         tags=tag_list,
         image_path=filename,

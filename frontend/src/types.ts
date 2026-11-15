@@ -1014,6 +1014,7 @@ export const OCCASIONS = [
 ];
 export const WEATHERS = ["晴", "陰", "雨", "冷", "熱", "風大"];
 export const STYLES = ["休閒", "韓系", "日系", "簡約", "個性", "甜美", "運動"];
+export const BRAND_SUGGESTIONS = ["UNIQLO", "GU", "GRL", "NET", "ZARA"];
 
 export function fullUrl(path: string): string {
   if (!path) return "";

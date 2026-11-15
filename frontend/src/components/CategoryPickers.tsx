@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
 import { useCategoryTree } from "../useCategories";
-import { categoryIcon, efficaciesOf } from "../types";
+import { efficaciesOf } from "../types";
 import { colors, radius, type } from "../theme";
 
 export function CategoryPicker({
@@ -29,19 +29,29 @@ export function CategoryPicker({
         (b) =>
           b.root.key === value || b.children.some((c) => c.key === value)
       );
-    if (!valid && tree.length) onChange(tree[0].root.key);
+    if (!valid && tree.length) {
+      const first = tree[0];
+      onChange(first.children[0]?.key ?? first.root.key);
+    }
   }, [autoDefault, value, tree, onChange]);
 
   return (
     <View>
-      <View style={styles.chipRow}>
-        {tree.map(({ root }) => {
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.categoryScroll}
+        contentContainerStyle={styles.rootRow}
+      >
+        {tree.map(({ root, children }) => {
           const active = activeRoot?.id === root.id;
           return (
             <TouchableOpacity
               key={root.id}
               style={[styles.chip, active && styles.chipActive]}
-              onPress={() => onChange(root.key)}
+              onPress={() =>
+                onChange(children[0]?.key ?? root.key)
+              }
               activeOpacity={0.8}
             >
               <Text
@@ -52,10 +62,15 @@ export function CategoryPicker({
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
       {branch && branch.children.length > 0 ? (
-        <View style={styles.subRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoryScroll}
+          contentContainerStyle={styles.subRow}
+        >
           <TouchableOpacity
             style={[
               styles.subChip,
@@ -82,9 +97,6 @@ export function CategoryPicker({
                 onPress={() => onChange(leaf.key)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.subChipIcon}>
-                  {categoryIcon(itemType, leaf.key)}
-                </Text>
                 <Text
                   style={[
                     styles.subChipText,
@@ -96,7 +108,7 @@ export function CategoryPicker({
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
       ) : null}
     </View>
   );
@@ -158,6 +170,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  categoryScroll: { flexGrow: 0, marginBottom: 2 },
+  rootRow: { flexDirection: "row", gap: 8, paddingRight: 8 },
   chip: {
     backgroundColor: colors.chip,
     paddingHorizontal: 14,
@@ -169,10 +183,11 @@ const styles = StyleSheet.create({
   chipTextActive: { color: "#fff", fontWeight: "700" },
   subRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
     gap: 8,
-    marginTop: 10,
-    paddingLeft: 4,
+    paddingTop: 10,
+    paddingRight: 8,
+    paddingBottom: 2,
   },
   subChip: {
     flexDirection: "row",
@@ -189,7 +204,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  subChipIcon: { fontSize: 12 },
   subChipText: { fontSize: 12, color: colors.sub, fontWeight: "600" },
   subChipTextActive: { color: "#fff" },
 });

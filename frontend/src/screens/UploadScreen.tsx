@@ -12,8 +12,17 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
+import {
+  Camera,
+  ChevronDown,
+  ChevronUp,
+  Image as ImageIcon,
+  Link2,
+  X,
+} from "lucide-react-native";
 import { http } from "../api";
 import {
+  BRAND_SUGGESTIONS,
   ITEM_TYPES,
   hasClothingFields,
   OCCASIONS,
@@ -72,6 +81,7 @@ function SectionTitle({ children }: { children: string }) {
 export default function UploadScreen() {
   const [uri, setUri] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [brand, setBrand] = useState("");
   const [itemType, setItemType] = useState("clothes");
   const [category, setCategory] = useState("");
   const [color, setColor] = useState("");
@@ -81,6 +91,7 @@ export default function UploadScreen() {
   const [style, setStyle] = useState("");
   const [expiry, setExpiry] = useState("");
   const [efficacy, setEfficacy] = useState<string[]>([]);
+  const [showMore, setShowMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -123,9 +134,10 @@ export default function UploadScreen() {
     try {
       const form = new FormData();
       const filename = uri.split("/").pop() || "photo.jpg";
-      const type = filename.endsWith(".png") ? "image/png" : "image/jpeg";
-      form.append("file", { uri, name: filename, type } as any);
+      const mime = filename.endsWith(".png") ? "image/png" : "image/jpeg";
+      form.append("file", { uri, name: filename, type: mime } as any);
       form.append("name", name);
+      form.append("brand", brand);
       form.append("item_type", itemType);
       form.append("category", category);
       form.append("color", color);
@@ -152,6 +164,7 @@ export default function UploadScreen() {
   function reset() {
     setUri(null);
     setName("");
+    setBrand("");
     setColor("");
     setSeason("");
     setOccasion("");
@@ -161,65 +174,63 @@ export default function UploadScreen() {
     setItemType("clothes");
     setCategory("");
     setEfficacy([]);
+    setShowMore(false);
   }
 
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={{ padding: 18, paddingBottom: 48 }}
+      keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.title}>新增項目</Text>
-      <Text style={styles.sub}>
-        上傳截圖、照片，或貼商品連結抓圖
-      </Text>
+      <View style={styles.mediaRow}>
+        <View style={styles.previewBox}>
+          {uri ? (
+            <Image source={{ uri }} style={styles.previewImage} resizeMode="cover" />
+          ) : (
+            <View style={styles.previewEmpty}>
+              <Text style={styles.previewIcon}>👕</Text>
+              <Text style={styles.previewText}>尚未選擇圖片</Text>
+            </View>
+          )}
+          {uri ? (
+            <TouchableOpacity
+              style={styles.previewRemove}
+              onPress={() => setUri(null)}
+              activeOpacity={0.8}
+            >
+              <X size={14} color="#fff" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
 
-      <View style={styles.pickRow}>
-        <TouchableOpacity
-          style={styles.pickBtn}
-          onPress={() => pick(false)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.pickEmoji}>🖼</Text>
-          <Text style={styles.pickBtnText}>相簿選圖</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.pickBtn}
-          onPress={() => pick(true)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.pickEmoji}>📷</Text>
-          <Text style={styles.pickBtnText}>拍照</Text>
-        </TouchableOpacity>
+        <View style={styles.mediaActions}>
+          <TouchableOpacity
+            style={styles.mediaBtn}
+            onPress={() => pick(false)}
+            activeOpacity={0.85}
+          >
+            <ImageIcon size={18} color={colors.text} strokeWidth={2} />
+            <Text style={styles.mediaBtnText}>相簿選圖</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.mediaBtn}
+            onPress={() => pick(true)}
+            activeOpacity={0.85}
+          >
+            <Camera size={18} color={colors.text} strokeWidth={2} />
+            <Text style={styles.mediaBtnText}>拍照</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.mediaBtn}
+            onPress={() => router.push("/scrape")}
+            activeOpacity={0.85}
+          >
+            <Link2 size={18} color={colors.text} strokeWidth={2} />
+            <Text style={styles.mediaBtnText}>貼商品連結</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-
-      <TouchableOpacity
-        style={styles.linkCard}
-        onPress={() => router.push("/scrape")}
-        activeOpacity={0.85}
-      >
-        <View style={styles.linkIcon}>
-          <Text style={styles.linkIconText}>🔗</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.linkTitle}>貼商品連結抓圖</Text>
-          <Text style={styles.linkSub}>
-            GRL、GU、UNIQLO、NET、ZOZOTOWN、蝦皮、淘寶…
-          </Text>
-          <Text style={styles.linkHint}>
-            從網址選你要的圖片，適合服飾、配件、化妝品
-          </Text>
-        </View>
-        <Text style={styles.linkArrow}>›</Text>
-      </TouchableOpacity>
-
-      {uri ? (
-        <Image source={{ uri }} style={styles.preview} resizeMode="cover" />
-      ) : (
-        <View style={styles.placeholder}>
-          <Text style={styles.placeholderEmoji}>👕</Text>
-          <Text style={styles.placeholderText}>尚未選擇圖片</Text>
-        </View>
-      )}
 
       <View style={styles.formCard}>
         <SectionTitle>基本資訊</SectionTitle>
@@ -230,6 +241,36 @@ export default function UploadScreen() {
           placeholder="名稱，例如：白色棉T"
           placeholderTextColor={colors.faint}
         />
+        <TextInput
+          style={styles.input}
+          value={brand}
+          onChangeText={setBrand}
+          placeholder="品牌，例如：UNIQLO"
+          placeholderTextColor={colors.faint}
+          autoCapitalize="characters"
+        />
+        <View style={styles.brandChips}>
+          {BRAND_SUGGESTIONS.map((suggestion) => {
+            const active = brand.trim().toUpperCase() === suggestion;
+            return (
+              <TouchableOpacity
+                key={suggestion}
+                style={[styles.brandChip, active && styles.brandChipActive]}
+                onPress={() => setBrand(active ? "" : suggestion)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.brandChipText,
+                    active && styles.brandChipTextActive,
+                  ]}
+                >
+                  {suggestion}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
         <TextInput
           style={styles.input}
           value={color}
@@ -272,58 +313,78 @@ export default function UploadScreen() {
           onChange={setEfficacy}
         />
 
-        {hasClothingFields(itemType) ? (
-          <>
-            <SectionTitle>季節</SectionTitle>
+        <TouchableOpacity
+          style={styles.moreToggle}
+          onPress={() => setShowMore((value) => !value)}
+          activeOpacity={0.8}
+        >
+          <View>
+            <Text style={styles.moreTitle}>更多資訊</Text>
+            <Text style={styles.moreSub}>季節、場合、天氣、風格</Text>
+          </View>
+          {showMore ? (
+            <ChevronUp size={20} color={colors.sub} />
+          ) : (
+            <ChevronDown size={20} color={colors.sub} />
+          )}
+        </TouchableOpacity>
+
+        {showMore ? (
+          <View style={styles.moreBody}>
+            {hasClothingFields(itemType) ? (
+              <>
+                <SectionTitle>季節</SectionTitle>
+                <ChipRow
+                  options={SEASONS}
+                  value={season}
+                  onChange={setSeason}
+                  allowEmpty="不設"
+                />
+              </>
+            ) : null}
+
+            <SectionTitle>場合</SectionTitle>
             <ChipRow
-              options={SEASONS}
-              value={season}
-              onChange={setSeason}
+              options={OCCASIONS}
+              value={occasion}
+              onChange={setOccasion}
               allowEmpty="不設"
             />
-          </>
-        ) : null}
 
-        <SectionTitle>場合</SectionTitle>
-        <ChipRow
-          options={OCCASIONS}
-          value={occasion}
-          onChange={setOccasion}
-          allowEmpty="不設"
-        />
+            {hasClothingFields(itemType) ? (
+              <>
+                <SectionTitle>天氣</SectionTitle>
+                <ChipRow
+                  options={WEATHERS}
+                  value={weather}
+                  onChange={setWeather}
+                  allowEmpty="不設"
+                />
+              </>
+            ) : null}
 
-        {hasClothingFields(itemType) ? (
-          <>
-            <SectionTitle>天氣</SectionTitle>
+            <SectionTitle>風格</SectionTitle>
             <ChipRow
-              options={WEATHERS}
-              value={weather}
-              onChange={setWeather}
+              options={STYLES}
+              value={style}
+              onChange={setStyle}
               allowEmpty="不設"
             />
-          </>
-        ) : null}
 
-        <SectionTitle>風格</SectionTitle>
-        <ChipRow
-          options={STYLES}
-          value={style}
-          onChange={setStyle}
-          allowEmpty="不設"
-        />
-
-        {!hasClothingFields(itemType) ? (
-          <>
-            <SectionTitle>到期日（選填）</SectionTitle>
-            <TextInput
-              style={styles.input}
-              value={expiry}
-              onChangeText={setExpiry}
-              placeholder="例如：2027-06 或 2027-06-30"
-              placeholderTextColor={colors.faint}
-              autoCapitalize="none"
-            />
-          </>
+            {!hasClothingFields(itemType) ? (
+              <>
+                <SectionTitle>到期日（選填）</SectionTitle>
+                <TextInput
+                  style={styles.input}
+                  value={expiry}
+                  onChangeText={setExpiry}
+                  placeholder="例如：2027-06 或 2027-06-30"
+                  placeholderTextColor={colors.faint}
+                  autoCapitalize="none"
+                />
+              </>
+            ) : null}
+          </View>
         ) : null}
       </View>
 
@@ -347,70 +408,56 @@ export default function UploadScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  title: { ...type.title, color: colors.text },
-  sub: { ...type.caption, color: colors.sub, marginTop: 6 },
-  pickRow: { flexDirection: "row", gap: 12, marginTop: 18 },
-  pickBtn: {
-    flex: 1,
-    backgroundColor: colors.card,
-    paddingVertical: 18,
-    borderRadius: radius.lg,
-    alignItems: "center",
-    gap: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow.soft,
-  },
-  pickEmoji: { fontSize: 26 },
-  pickBtnText: { color: colors.text, fontWeight: "700", fontSize: 13 },
-  linkCard: {
-    marginTop: 12,
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
+  mediaRow: {
     flexDirection: "row",
-    alignItems: "center",
     gap: 12,
-    ...shadow.soft,
+    alignItems: "stretch",
   },
-  linkIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: colors.accentSoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  linkIconText: { fontSize: 22 },
-  linkTitle: { fontSize: 14, fontWeight: "800", color: colors.text },
-  linkSub: { fontSize: 10, color: colors.sub, marginTop: 3 },
-  linkHint: { fontSize: 10, color: colors.faint, marginTop: 4 },
-  linkArrow: { fontSize: 24, color: colors.faint },
-  preview: {
-    width: "100%",
+  previewBox: {
+    width: "42%",
     aspectRatio: 1,
     borderRadius: radius.lg,
-    marginTop: 16,
-    backgroundColor: "#eee",
-    ...shadow.card,
-  },
-  placeholder: {
-    width: "100%",
-    aspectRatio: 1,
-    borderRadius: radius.lg,
-    marginTop: 16,
     backgroundColor: colors.card,
     borderWidth: 1.5,
     borderColor: colors.border,
     borderStyle: "dashed",
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
+  },
+  previewImage: { width: "100%", height: "100%" },
+  previewEmpty: { alignItems: "center", gap: 8, padding: 8 },
+  previewIcon: { fontSize: 42, opacity: 0.45 },
+  previewText: { fontSize: 10, color: colors.faint },
+  previewRemove: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mediaActions: {
+    flex: 1,
+    justifyContent: "space-between",
     gap: 8,
   },
-  placeholderEmoji: { fontSize: 44, opacity: 0.5 },
-  placeholderText: { ...type.caption, color: colors.faint },
+  mediaBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: 14,
+    minHeight: 44,
+  },
+  mediaBtnText: { fontSize: 13, fontWeight: "700", color: colors.text },
   formCard: {
     marginTop: 20,
     backgroundColor: colors.card,
@@ -433,8 +480,29 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 15,
     color: colors.text,
-    marginBottom: 4,
+    marginBottom: 9,
   },
+  brandChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+    marginTop: -2,
+    marginBottom: 9,
+  },
+  brandChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    borderRadius: radius.full,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  brandChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  brandChipText: { fontSize: 12, color: colors.text, fontWeight: "600" },
+  brandChipTextActive: { color: "#fff" },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     backgroundColor: colors.chip,
@@ -445,6 +513,18 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.chipActive },
   chipText: { fontSize: 13, color: colors.sub, fontWeight: "500" },
   chipTextActive: { color: "#fff", fontWeight: "700" },
+  moreToggle: {
+    marginTop: 18,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  moreTitle: { fontSize: 14, fontWeight: "800", color: colors.text },
+  moreSub: { fontSize: 10, color: colors.faint, marginTop: 3 },
+  moreBody: { marginTop: 2 },
   error: { color: colors.danger, marginTop: 16, fontSize: 13 },
   save: {
     backgroundColor: colors.primary,

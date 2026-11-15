@@ -60,6 +60,9 @@ class ItemCreate(BaseModel):
     weather: str = ""
     style: str = ""
     expiry: str = ""
+    brand: str = ""
+    size: str = ""
+    price: str = ""
     efficacy: str = ""
     tags: list[str] = []
     source_url: str | None = None
@@ -143,6 +146,7 @@ class SaveScrapedImageIn(BaseModel):
     weather: str = ""
     style: str = ""
     expiry: str = ""
+    brand: str = ""
     efficacy: str = ""
     tags: list[str] = []
     source_page: str | None = None

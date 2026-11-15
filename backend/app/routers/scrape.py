@@ -537,6 +537,7 @@ def save_scraped_image(
         weather=data.weather,
         style=data.style,
         expiry=data.expiry,
+        brand=data.brand,
         efficacy=data.efficacy,
         tags=data.tags,
         image_path=filename,
