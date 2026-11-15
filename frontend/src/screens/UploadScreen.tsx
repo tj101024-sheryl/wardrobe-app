@@ -169,7 +169,9 @@ export default function UploadScreen() {
       contentContainerStyle={{ padding: 18, paddingBottom: 48 }}
     >
       <Text style={styles.title}>新增項目</Text>
-      <Text style={styles.sub}>上傳截圖、照片，或從相簿選一張</Text>
+      <Text style={styles.sub}>
+        上傳截圖、照片，或貼商品連結抓圖
+      </Text>
 
       <View style={styles.pickRow}>
         <TouchableOpacity
@@ -189,6 +191,26 @@ export default function UploadScreen() {
           <Text style={styles.pickBtnText}>拍照</Text>
         </TouchableOpacity>
       </View>
+
+      <TouchableOpacity
+        style={styles.linkCard}
+        onPress={() => router.push("/scrape")}
+        activeOpacity={0.85}
+      >
+        <View style={styles.linkIcon}>
+          <Text style={styles.linkIconText}>🔗</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.linkTitle}>貼商品連結抓圖</Text>
+          <Text style={styles.linkSub}>
+            GRL、GU、UNIQLO、NET、ZOZOTOWN、蝦皮、淘寶…
+          </Text>
+          <Text style={styles.linkHint}>
+            從網址選你要的圖片，適合服飾、配件、化妝品
+          </Text>
+        </View>
+        <Text style={styles.linkArrow}>›</Text>
+      </TouchableOpacity>
 
       {uri ? (
         <Image source={{ uri }} style={styles.preview} resizeMode="cover" />
@@ -341,6 +363,31 @@ const styles = StyleSheet.create({
   },
   pickEmoji: { fontSize: 26 },
   pickBtnText: { color: colors.text, fontWeight: "700", fontSize: 13 },
+  linkCard: {
+    marginTop: 12,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    ...shadow.soft,
+  },
+  linkIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: colors.accentSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  linkIconText: { fontSize: 22 },
+  linkTitle: { fontSize: 14, fontWeight: "800", color: colors.text },
+  linkSub: { fontSize: 10, color: colors.sub, marginTop: 3 },
+  linkHint: { fontSize: 10, color: colors.faint, marginTop: 4 },
+  linkArrow: { fontSize: 24, color: colors.faint },
   preview: {
     width: "100%",
     aspectRatio: 1,

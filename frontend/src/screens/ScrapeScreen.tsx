@@ -19,14 +19,18 @@ import { colors, radius, shadow, type } from "../theme";
 
 export default function ScrapeScreen() {
   const [url, setUrl] = useState("");
+  const [directUrl, setDirectUrl] = useState("");
   const [result, setResult] = useState<ScrapeResult | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [itemType, setItemType] = useState("clothes");
   const [category, setCategory] = useState("");
   const [efficacy, setEfficacy] = useState<string[]>([]);
+  const [name, setName] = useState("");
+  const [color, setColor] = useState("");
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   function chooseType(key: string) {
     setItemType(key);
@@ -41,6 +45,7 @@ export default function ScrapeScreen() {
     }
     setBusy(true);
     setError("");
+    setNotice("");
     setResult(null);
     setSelected(new Set());
     try {
@@ -67,19 +72,51 @@ export default function ScrapeScreen() {
     });
   }
 
+  function toggleAll() {
+    if (!result) return;
+    if (selected.size === result.images.length) {
+      setSelected(new Set());
+      return;
+    }
+    setSelected(new Set(result.images.map((img) => img.url)));
+  }
+
+  function loadDirectImage() {
+    const value = directUrl.trim();
+    if (
+      !value.startsWith("http://") &&
+      !value.startsWith("https://")
+    ) {
+      setError("請輸入完整的圖片網址（含 https://）");
+      return;
+    }
+    setError("");
+    const image = {
+      url: value,
+      width: null,
+      height: null,
+      kind: "direct",
+    };
+    setNotice("");
+    setResult({ url: value, page_title: "直接圖片", images: [image] });
+    setSelected(new Set([value]));
+  }
+
   async function saveSelected() {
     if (!result || selected.size === 0) return;
     setSaving(true);
     setError("");
+    setNotice("");
     let ok = 0;
     let fail = 0;
     for (const img of selected) {
       try {
         await http.post("/api/scrape/save", {
           url: img,
-          name: "",
+          name: name.trim(),
           item_type: itemType,
           category,
+          color: color.trim(),
           efficacy: joinEfficacy(efficacy),
           source_page: result.url,
         });
@@ -90,6 +127,8 @@ export default function ScrapeScreen() {
     }
     setSaving(false);
     if (ok > 0) {
+      setNotice(`已存入衣櫃 ${ok} 張${fail ? `，失敗 ${fail} 張` : ""}`);
+      setSelected(new Set());
       Alert.alert(
         "已存入衣櫃",
         `成功 ${ok} 張${fail ? `，失敗 ${fail} 張` : ""}`,
@@ -112,11 +151,22 @@ export default function ScrapeScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={{ padding: 18, paddingBottom: 48 }}
+      keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.title}>抓取商品圖片</Text>
+      <Text style={styles.title}>貼連結抓圖</Text>
       <Text style={styles.sub}>
-        貼上蝦皮、UNIQLO、GU、NET 或任何商品頁網址，選一張或多張存入衣櫃
+        貼上商品頁網址，挑選你要的圖片存入衣櫃。支援服飾、配件、化妝品與保養品。
       </Text>
+
+      <View style={styles.storeRow}>
+        {["GRL", "GU", "UNIQLO", "NET", "ZOZOTOWN", "蝦皮", "淘寶"].map(
+          (store) => (
+            <View key={store} style={styles.storeChip}>
+              <Text style={styles.storeText}>{store}</Text>
+            </View>
+          )
+        )}
+      </View>
 
       <View style={styles.inputCard}>
         <TextInput
@@ -143,9 +193,43 @@ export default function ScrapeScreen() {
         </TouchableOpacity>
       </View>
 
+      <View style={styles.directCard}>
+        <Text style={styles.directTitle}>抓不到？直接貼圖片網址</Text>
+        <View style={styles.directRow}>
+          <TextInput
+            style={styles.directInput}
+            value={directUrl}
+            onChangeText={setDirectUrl}
+            placeholder="https://...jpg"
+            placeholderTextColor={colors.faint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            onSubmitEditing={loadDirectImage}
+            returnKeyType="go"
+          />
+          <TouchableOpacity
+            style={styles.directBtn}
+            onPress={loadDirectImage}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.directBtnText}>載入</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.directHint}>
+          在商品圖片上長按／右鍵 → 複製圖片網址。蝦皮、淘寶被擋時可先用這招。
+        </Text>
+      </View>
+
       {error ? (
         <View style={styles.errorBox}>
           <Text style={styles.error}>{error}</Text>
+        </View>
+      ) : null}
+
+      {notice ? (
+        <View style={styles.noticeBox}>
+          <Text style={styles.noticeText}>{notice}</Text>
         </View>
       ) : null}
 
@@ -155,10 +239,17 @@ export default function ScrapeScreen() {
             <Text style={styles.pageTitle} numberOfLines={2}>
               {result.page_title || result.url}
             </Text>
-            <View style={styles.countPill}>
-              <Text style={styles.countText}>
-                {selected.size} / {result.images.length}
-              </Text>
+            <View style={styles.resultActions}>
+              <TouchableOpacity onPress={toggleAll} activeOpacity={0.7}>
+                <Text style={styles.selectAll}>
+                  {selected.size === result.images.length ? "取消全選" : "全選"}
+                </Text>
+              </TouchableOpacity>
+              <View style={styles.countPill}>
+                <Text style={styles.countText}>
+                  {selected.size} / {result.images.length}
+                </Text>
+              </View>
             </View>
           </View>
           <Text style={styles.hint}>點選圖片加入衣櫃</Text>
@@ -226,6 +317,26 @@ export default function ScrapeScreen() {
               values={efficacy}
               onChange={setEfficacy}
             />
+
+            <Text style={styles.fieldLabel}>名稱（選填）</Text>
+            <TextInput
+              style={styles.fieldInput}
+              value={name}
+              onChangeText={setName}
+              placeholder="例如：白色棉T、保濕粉底液"
+              placeholderTextColor={colors.faint}
+            />
+            <Text style={styles.fieldLabel}>顏色（選填）</Text>
+            <TextInput
+              style={styles.fieldInput}
+              value={color}
+              onChangeText={setColor}
+              placeholder="例如：白、黑、米"
+              placeholderTextColor={colors.faint}
+            />
+            <Text style={styles.multiHint}>
+              一次存多張時會套用相同名稱與顏色，之後可在單品頁修改。
+            </Text>
           </View>
 
           <TouchableOpacity
@@ -251,9 +362,16 @@ export default function ScrapeScreen() {
       <View style={styles.tipCard}>
         <Text style={styles.tipTitle}>抓不到圖？</Text>
         <Text style={styles.tipBody}>
-          部分網站（如蝦皮）有反爬或純動態載入，可能抓不到。這時請改用「上傳截圖」：
-          在商品頁截圖後從衣櫃頁上傳即可。
+          大部分服飾店可以直接抓；蝦皮、淘寶等網站有時會擋自動抓取或需要登入。
+          這時請改用手機截圖上傳，或先按「抓圖」再換一張圖片。
         </Text>
+        <TouchableOpacity
+          style={styles.uploadInstead}
+          onPress={() => router.push("/upload")}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.uploadInsteadText}>改用截圖上傳</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -280,6 +398,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     ...shadow.card,
   },
+  storeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 12,
+  },
+  storeChip: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.full,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  storeText: { fontSize: 9, color: colors.sub, fontWeight: "600" },
   input: {
     flex: 1,
     paddingVertical: Platform.OS === "web" ? 10 : 8,
@@ -295,6 +428,45 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   goBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  directCard: {
+    marginTop: 10,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+  },
+  directTitle: { fontSize: 11, fontWeight: "700", color: colors.sub },
+  directRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  directInput: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 12,
+    color: colors.text,
+  },
+  directBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  directBtnText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  directHint: {
+    fontSize: 9,
+    color: colors.faint,
+    lineHeight: 14,
+    marginTop: 7,
+  },
   errorBox: {
     marginTop: 14,
     padding: 14,
@@ -302,12 +474,21 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   error: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  noticeBox: {
+    marginTop: 14,
+    padding: 14,
+    backgroundColor: "#eef6ee",
+    borderRadius: radius.md,
+  },
+  noticeText: { color: "#3d6b3d", fontSize: 13, lineHeight: 18 },
   resultHead: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 10,
   },
+  resultActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  selectAll: { fontSize: 11, fontWeight: "700", color: colors.sub },
   pageTitle: { ...type.heading, color: colors.text, flex: 1, fontSize: 15 },
   countPill: {
     backgroundColor: colors.accentSoft,
@@ -368,6 +549,22 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 8,
   },
+  fieldInput: {
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: colors.text,
+  },
+  multiHint: {
+    fontSize: 9,
+    color: colors.faint,
+    marginTop: 8,
+    lineHeight: 14,
+  },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     backgroundColor: colors.chip,
@@ -395,4 +592,15 @@ const styles = StyleSheet.create({
   },
   tipTitle: { fontWeight: "700", color: "#8a6d12", marginBottom: 6, fontSize: 14 },
   tipBody: { color: "#5c5340", fontSize: 13, lineHeight: 20 },
+  uploadInstead: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+    backgroundColor: colors.card,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: "rgba(138,109,18,0.35)",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  uploadInsteadText: { fontSize: 11, fontWeight: "700", color: "#8a6d12" },
 });

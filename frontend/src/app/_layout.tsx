@@ -27,7 +27,7 @@ export default function RootLayout() {
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="register" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="scrape" options={{ title: "抓圖" }} />
+          <Stack.Screen name="scrape" options={{ title: "貼連結抓圖" }} />
           <Stack.Screen name="upload" options={{ title: "新增項目" }} />
           <Stack.Screen name="item/[id]" options={{ title: "項目資訊" }} />
           <Stack.Screen name="user/[id]" options={{ title: "個人檔案" }} />
