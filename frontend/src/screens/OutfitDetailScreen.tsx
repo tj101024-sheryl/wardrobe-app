@@ -356,12 +356,6 @@ export default function OutfitDetailScreen({ outfitId }: { outfitId: number }) {
           >
             <Text style={styles.retryText}>重試</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => router.push("/settings/connection")}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.connectionLink}>連線設定</Text>
-          </TouchableOpacity>
         </View>
       ) : null}
 
@@ -705,12 +699,6 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   retryText: { fontSize: 11, fontWeight: "700", color: colors.text },
-  connectionLink: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.danger,
-    textDecorationLine: "underline",
-  },
   infoBanner: {
     marginTop: 14,
     backgroundColor: colors.accentSoft,

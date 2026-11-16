@@ -7,7 +7,6 @@ import React, {
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { http, setToken } from "./api";
-import { loadApiBaseOverride } from "./connection";
 import { User } from "./types";
 
 type AuthState = {
@@ -25,7 +24,6 @@ const KEY = "wardrobe_token";
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [configReady, setConfigReady] = useState(false);
 
   async function refresh() {
     try {
@@ -40,8 +38,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      await loadApiBaseOverride();
-      setConfigReady(true);
       const t = await AsyncStorage.getItem(KEY);
       if (t) {
         setToken(t);
@@ -50,10 +46,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     })();
   }, []);
-
-  if (!configReady) {
-    return null;
-  }
 
   async function saveSession(accessToken: string) {
     setToken(accessToken);

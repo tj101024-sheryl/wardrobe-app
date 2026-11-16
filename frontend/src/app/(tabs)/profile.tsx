@@ -118,7 +118,7 @@ export default function ProfileScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>設定</Text>
-        {["個人檔案", "通知", "後端連線", "關於"].map((row) => (
+        {["個人檔案", "通知", "關於"].map((row) => (
           <TouchableOpacity
             key={row}
             style={styles.row}
@@ -128,7 +128,6 @@ export default function ProfileScreen() {
                 router.push(`/user/${user.id}`);
               }
               if (row === "通知") router.push("/settings/notifications");
-              if (row === "後端連線") router.push("/settings/connection");
             }}
           >
             <Text style={styles.rowText}>{row}</Text>

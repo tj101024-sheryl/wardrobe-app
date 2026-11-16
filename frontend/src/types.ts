@@ -32,29 +32,10 @@ function resolveHost(): string {
   return "140.118.219.6";
 }
 
-const ENV_API_BASE = normalizeApiBase(
-  process.env.EXPO_PUBLIC_API_BASE || ""
-);
-const AUTO_API_BASE = ENV_API_BASE || `http://${resolveHost()}:8000`;
-let apiBaseOverride: string | null = null;
+const AUTO_API_BASE = `http://${resolveHost()}:8000`;
 
 export function getApiBase(): string {
-  // Tunnel 模式的 EXPO_PUBLIC_API_BASE 優先，避免平板還帶著舊的校園 IP 覆蓋設定。
-  return ENV_API_BASE || apiBaseOverride || AUTO_API_BASE;
-}
-
-export function getAutoApiBase(): string {
   return AUTO_API_BASE;
-}
-
-export function normalizeApiBase(value: string): string {
-  const trimmed = (value || "").trim().replace(/\/+$/, "");
-  if (!trimmed) return "";
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
-}
-
-export function setApiBaseOverride(value: string | null): void {
-  apiBaseOverride = normalizeApiBase(value || "") || null;
 }
 
 export type Item = {

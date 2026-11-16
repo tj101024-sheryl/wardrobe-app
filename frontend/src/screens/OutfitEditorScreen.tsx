@@ -623,24 +623,15 @@ export default function OutfitEditorScreen() {
               <Text style={styles.errorMain}>{error}</Text>
               <Text style={styles.errorHint}>目前 API：{getApiBase()}</Text>
             </View>
-            <View style={styles.errorActions}>
-              <TouchableOpacity
-                style={styles.retryBtn}
-                onPress={() => {
-                  void load();
-                }}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.retryText}>重試</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.connectionLink}
-                onPress={() => router.push("/settings/connection")}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.connectionLinkText}>連線設定</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={() => {
+                void load();
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.retryText}>重試</Text>
+            </TouchableOpacity>
           </View>
         ) : null}
 
@@ -1618,14 +1609,6 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   retryText: { fontSize: 11, fontWeight: "700", color: colors.danger },
-  errorActions: { alignItems: "center", gap: 6 },
-  connectionLink: { paddingVertical: 2 },
-  connectionLinkText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.danger,
-    textDecorationLine: "underline",
-  },
   footer: {
     position: "absolute",
     left: 0,
