@@ -39,7 +39,8 @@ const AUTO_API_BASE = ENV_API_BASE || `http://${resolveHost()}:8000`;
 let apiBaseOverride: string | null = null;
 
 export function getApiBase(): string {
-  return apiBaseOverride || AUTO_API_BASE;
+  // Tunnel 模式的 EXPO_PUBLIC_API_BASE 優先，避免平板還帶著舊的校園 IP 覆蓋設定。
+  return ENV_API_BASE || apiBaseOverride || AUTO_API_BASE;
 }
 
 export function getAutoApiBase(): string {
