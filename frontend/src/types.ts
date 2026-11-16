@@ -32,7 +32,10 @@ function resolveHost(): string {
   return "140.118.219.6";
 }
 
-const AUTO_API_BASE = `http://${resolveHost()}:8000`;
+const ENV_API_BASE = normalizeApiBase(
+  process.env.EXPO_PUBLIC_API_BASE || ""
+);
+const AUTO_API_BASE = ENV_API_BASE || `http://${resolveHost()}:8000`;
 let apiBaseOverride: string | null = null;
 
 export function getApiBase(): string {
