@@ -13,6 +13,7 @@ import {
   Modal,
   Pressable,
   Alert,
+  Image,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { http } from "../api";
@@ -24,6 +25,7 @@ import {
   hasEfficacyFields,
   Item,
   ServerCategory,
+  fullUrl,
 } from "../types";
 import { useCategoryTree } from "../useCategories";
 import { PHONE_MAX_WIDTH } from "../components/PhoneFrame";
@@ -506,11 +508,23 @@ export default function WardrobeScreen() {
                   <View
                     style={styles.cardImg}
                     accessible
-                    accessibilityLabel="項目圖示"
+                    accessibilityLabel="項目圖片"
                   >
-                    <Text style={styles.cardIcon}>
-                      {categoryIcon(item.item_type, item.category)}
-                    </Text>
+                    {item.cutout_path || item.image_path ? (
+                      <Image
+                        source={{
+                          uri: fullUrl(
+                            item.cutout_path || item.image_path
+                          ),
+                        }}
+                        style={styles.cardPhoto}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <Text style={styles.cardIcon}>
+                        {categoryIcon(item.item_type, item.category)}
+                      </Text>
+                    )}
                   </View>
                   <View style={styles.cardBody}>
                     <Text numberOfLines={1} style={styles.cardTitle}>
@@ -1147,6 +1161,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   cardIcon: { fontSize: 40 },
+  cardPhoto: { width: "100%", height: "100%" },
   cardBody: { paddingTop: 7 },
   cardTitle: {
     color: colors.text,
