@@ -11,6 +11,7 @@ import {
   Image,
   Modal,
   Pressable,
+  Switch,
   useWindowDimensions,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
@@ -37,7 +38,6 @@ import {
   MakeupLook,
   STYLE_OPTIONS,
   outfitRoleOf,
-  usageLabel,
   VISIBILITY_LABEL,
   fullUrl,
 } from "../types";
@@ -46,6 +46,7 @@ import {
   longDate,
   parseYmd,
   relativeDate,
+  shortDate,
   ymd,
 } from "../date";
 import { ItemThumb } from "../components/ItemThumb";
@@ -85,7 +86,7 @@ function PhotoCard({
 }) {
   return (
     <View style={[styles.photoCard, { width }]}>
-      <View style={[styles.photoBox, { width, height: width }]}>
+      <View style={[styles.photoBox, { width, height: 140 }]}>
         {uri ? (
           <Image
             source={{ uri }}
@@ -97,6 +98,7 @@ function PhotoCard({
             <Text style={styles.photoEmptyIcon}>
               {kind === "outfit" ? "🪞" : "💄"}
             </Text>
+            <Text style={styles.photoEmptyLabel}>{label}</Text>
             <Text style={styles.photoEmptyText}>{hint}</Text>
           </View>
         )}
@@ -110,7 +112,6 @@ function PhotoCard({
           </TouchableOpacity>
         ) : null}
       </View>
-      <Text style={styles.photoLabel}>{label}</Text>
       <View style={styles.photoBtns}>
         <TouchableOpacity
           style={styles.photoBtn}
@@ -159,7 +160,6 @@ export default function OutfitEditorScreen() {
   const initialDate = params.date || ymd(new Date());
   const { width } = useWindowDimensions();
   const frame = Math.min(width, PHONE_MAX_WIDTH);
-  const photoW = (frame - 36 - 10) / 2;
 
   const [dateStr, setDateStr] = useState(initialDate);
   const [title, setTitle] = useState("");
@@ -201,6 +201,9 @@ export default function OutfitEditorScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [showMore, setShowMore] = useState(false);
+  const [datePicker, setDatePicker] = useState(false);
+  const [itemPicker, setItemPicker] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -308,6 +311,15 @@ export default function OutfitEditorScreen() {
 
   const countable = selected.length + productIds.length > 0;
   const isFuture = dateStr > ymd(new Date());
+  const todayStr = ymd(new Date());
+  const yesterdayStr = ymd(addDays(new Date(), -1));
+  const publishOn = visibility === "public";
+
+  function setPublish(next: boolean) {
+    const value = next ? "public" : "private";
+    setVisibility(value);
+    setMakeupVisibility(value);
+  }
 
   function toggle(id: number) {
     const exists = selected.includes(id);
@@ -640,332 +652,321 @@ export default function OutfitEditorScreen() {
           </View>
         ) : null}
 
-        <Text style={styles.sectionTitle}>哪一天</Text>
-        <View style={styles.dateCard}>
+        <View style={styles.dateChips}>
           <TouchableOpacity
-            style={styles.dateArrow}
-            onPress={() => shiftDate(-1)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.dateArrowText}>‹</Text>
-          </TouchableOpacity>
-          <View style={{ flex: 1, alignItems: "center" }}>
-            <Text style={styles.dateMain}>{relativeDate(dateStr)}</Text>
-            <Text style={styles.dateSub}>{longDate(dateStr)}</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.dateArrow}
-            onPress={() => shiftDate(1)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.dateArrowText}>›</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.quickDates}>
-          {[
-            { label: "今天", offset: 0 },
-            { label: "明天", offset: 1 },
-            { label: "後天", offset: 2 },
-          ].map((q) => {
-            const value = ymd(addDays(new Date(), q.offset));
-            const active = dateStr === value;
-            return (
-              <TouchableOpacity
-                key={q.label}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => setDateStr(value)}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[styles.chipText, active && styles.chipTextActive]}
-                >
-                  {q.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        <Text style={styles.sectionTitle}>這天的照片</Text>
-        <Text style={styles.sectionHint}>都可以留空，之後再補</Text>
-        <View style={styles.photoRow}>
-          <PhotoCard
-            label="穿搭照"
-            hint="拍下今天的穿搭"
-            uri={outfitPreview}
-            kind="outfit"
-            width={photoW}
-            onPick={(camera) => pickPhoto("outfit", camera)}
-            onRemove={() => removePhoto("outfit")}
-          />
-          <PhotoCard
-            label="妝容照"
-            hint="拍下今天的妝容"
-            uri={makeupPreview}
-            kind="makeup"
-            width={photoW}
-            onPick={(camera) => pickPhoto("makeup", camera)}
-            onRemove={() => removePhoto("makeup")}
-          />
-        </View>
-
-        <Text style={styles.sectionTitle}>排版模式</Text>
-        <Text style={styles.sectionHint}>
-          快速列表最省事；想做成拼貼就用畫布，拖曳喜歡的位置
-        </Text>
-        <View style={styles.modeTabs}>
-          {[
-            { key: false, label: "快速列表" },
-            { key: true, label: "畫布拼貼" },
-          ].map((tab) => {
-            const active = canvasMode === tab.key;
-            return (
-              <TouchableOpacity
-                key={tab.label}
-                style={[styles.modeTab, active && styles.modeTabActive]}
-                onPress={() => switchCanvasMode(tab.key)}
-                activeOpacity={0.85}
-              >
-                <Text
-                  style={[styles.modeText, active && styles.modeTextActive]}
-                >
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {canvasMode ? (
-          selectedItems.length === 0 ? (
-            <View style={styles.canvasEmpty}>
-              <Text style={styles.canvasEmptyEmoji}>🎨</Text>
-              <Text style={styles.canvasEmptyText}>
-                先從下面的單品挑幾件{"\n"}畫布會自動幫你排好位置
-              </Text>
-            </View>
-          ) : (
-            <>
-              <OutfitCanvas
-                items={selectedItems}
-                transforms={canvasTransforms}
-                size={canvasSize}
-                editable
-                selectedId={canvasSelected}
-                onSelect={setCanvasSelected}
-                onTransform={updateCanvasTransform}
-              />
-              <Text style={styles.canvasHint}>
-                直接拖曳單品移動；點選後可用下方按鈕縮放、旋轉與調整圖層
-              </Text>
-              {canvasItem ? (
-                <View style={styles.canvasTools}>
-                  <View style={styles.canvasToolHead}>
-                    <Text style={styles.canvasToolName} numberOfLines={1}>
-                      {canvasItem.name || "未命名單品"}
-                    </Text>
-                    <Text style={styles.canvasToolMeta}>已選取</Text>
-                  </View>
-                  <View style={styles.toolRow}>
-                    <CanvasToolButton
-                      label="縮小"
-                      onPress={() => nudgeScale(-0.1)}
-                    />
-                    <CanvasToolButton
-                      label="放大"
-                      onPress={() => nudgeScale(0.1)}
-                    />
-                    <CanvasToolButton
-                      label="左轉"
-                      onPress={() => nudgeRotation(-15)}
-                    />
-                    <CanvasToolButton
-                      label="右轉"
-                      onPress={() => nudgeRotation(15)}
-                    />
-                    <CanvasToolButton
-                      label="上層"
-                      onPress={() => layerCanvasItem("up")}
-                    />
-                    <CanvasToolButton
-                      label="下層"
-                      onPress={() => layerCanvasItem("down")}
-                    />
-                    <CanvasToolButton label="重設" onPress={resetCanvasItem} />
-                    <CanvasToolButton label="移除" onPress={removeCanvasItem} />
-                  </View>
-                </View>
-              ) : (
-                <Text style={styles.canvasHint}>
-                  點一下畫布上的單品，就能調整大小、角度與圖層
-                </Text>
-              )}
-            </>
-          )
-        ) : null}
-
-        <Text style={styles.sectionTitle}>穿搭</Text>
-        <Text style={styles.sectionHint}>
-          已選 {selected.length} 件
-          {isFuture ? " · 到當天才會累計次數" : ""}
-        </Text>
-
-        {selected.length > 0 ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.selectedScroll}
-            contentContainerStyle={styles.selectedRow}
-          >
-            {selected.map((id) => {
-              const item = byId.get(id);
-              if (!item) return null;
-              return (
-                <TouchableOpacity
-                  key={id}
-                  style={styles.selectedItem}
-                  onPress={() => toggle(id)}
-                  activeOpacity={0.8}
-                >
-                  <ItemThumb item={item} size={54} />
-                  <View style={styles.selectedRemove}>
-                    <Text style={styles.selectedRemoveText}>×</Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        ) : null}
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterScroll}
-          contentContainerStyle={styles.filterRow}
-        >
-          <TouchableOpacity
-            style={[styles.chip, roleFilter === "all" && styles.chipActive]}
-            onPress={() => setRoleFilter("all")}
+            style={[
+              styles.dateChip,
+              dateStr === todayStr && styles.dateChipActive,
+            ]}
+            onPress={() => setDateStr(todayStr)}
             activeOpacity={0.8}
           >
             <Text
               style={[
-                styles.chipText,
-                roleFilter === "all" && styles.chipTextActive,
+                styles.dateChipText,
+                dateStr === todayStr && styles.dateChipTextActive,
               ]}
             >
-              全部
+              今天 {shortDate(todayStr)}
             </Text>
           </TouchableOpacity>
-          {groups.map((g) => {
-            const active = roleFilter === g.key;
-            return (
-              <TouchableOpacity
-                key={g.key}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => setRoleFilter(g.key)}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[styles.chipText, active && styles.chipTextActive]}
-                >
-                  {g.label} {g.items.length}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+          <TouchableOpacity
+            style={[
+              styles.dateChip,
+              dateStr === yesterdayStr && styles.dateChipActive,
+            ]}
+            onPress={() => setDateStr(yesterdayStr)}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.dateChipText,
+                dateStr === yesterdayStr && styles.dateChipTextActive,
+              ]}
+            >
+              昨天
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.dateChip,
+              dateStr !== todayStr &&
+                dateStr !== yesterdayStr &&
+                styles.dateChipActive,
+            ]}
+            onPress={() => setDatePicker(true)}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.dateChipText,
+                dateStr !== todayStr &&
+                  dateStr !== yesterdayStr &&
+                  styles.dateChipTextActive,
+              ]}
+            >
+              {dateStr !== todayStr && dateStr !== yesterdayStr
+                ? shortDate(dateStr)
+                : "選日期"}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-        {outfitItems.length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🧺</Text>
-            <Text style={styles.emptyText}>
-              衣櫃裡還沒有衣物{"\n"}先到衣櫃新增，再回來記錄
+        <View style={styles.card}>
+          <View style={styles.cardHead}>
+            <Text style={styles.cardTitle}>穿搭</Text>
+            <Text style={styles.cardMeta}>
+              已選 {selected.length} 件 · 都可以留空
             </Text>
           </View>
-        ) : (
-          visibleGroups.map((group) => (
-            <View key={group.key} style={styles.group}>
-              <Text style={styles.groupTitle}>{group.label}</Text>
-              {group.items.map((item) => {
-                const picked = selected.includes(item.id);
+          <View style={styles.cardBody}>
+            <PhotoCard
+              label="穿搭照"
+              hint="拍照 / 相簿"
+              uri={outfitPreview}
+              kind="outfit"
+              width={110}
+              onPick={(camera) => pickPhoto("outfit", camera)}
+              onRemove={() => removePhoto("outfit")}
+            />
+            <View style={styles.tiles}>
+              {selected.map((id) => {
+                const item = byId.get(id);
+                if (!item) return null;
                 return (
                   <TouchableOpacity
-                    key={item.id}
-                    style={[styles.itemRow, picked && styles.itemRowActive]}
-                    onPress={() => toggle(item.id)}
+                    key={id}
+                    style={styles.tile}
+                    onPress={() => toggle(id)}
                     activeOpacity={0.8}
                   >
-                    <ItemThumb item={item} size={48} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.itemName} numberOfLines={1}>
-                        {item.name || "未命名"}
-                      </Text>
-                      <Text style={styles.itemMeta} numberOfLines={1}>
-                        {CATEGORY_LABEL[item.category] || item.category}
-                        {item.color ? ` · ${item.color}` : ""}
-                        {item.wear_count > 0
-                          ? ` · ${usageLabel(item.item_type)} ${item.wear_count} 次`
-                          : ""}
-                      </Text>
-                    </View>
-                    <View
-                      style={[styles.check, picked && styles.checkActive]}
-                    >
-                      <Text
-                        style={[
-                          styles.checkText,
-                          picked && styles.checkTextActive,
-                        ]}
-                      >
-                        {picked ? "✓" : "+"}
-                      </Text>
+                    <ItemThumb item={item} size={44} />
+                    <View style={styles.tileRemove}>
+                      <Text style={styles.tileRemoveText}>×</Text>
                     </View>
                   </TouchableOpacity>
                 );
               })}
+              <TouchableOpacity
+                style={styles.addTile}
+                onPress={() => setItemPicker(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.addTilePlus}>＋</Text>
+                <Text style={styles.addTileText}>新增單品</Text>
+              </TouchableOpacity>
             </View>
-          ))
-        )}
-
-        <View style={styles.makeupHead}>
-          <View>
-            <Text style={styles.sectionTitle}>妝容、保養與使用品項</Text>
-            <Text style={styles.sectionHint}>
-              可選填，選今天用的化妝品、保養品或其他品項
+          </View>
+          {outfitItems.length === 0 ? (
+            <Text style={styles.cardHint}>
+              衣櫃裡沒有穿搭？點「＋ 新增單品」，存完會自動回來帶入已選。
             </Text>
+          ) : null}
+        </View>
+
+
+        <View style={styles.card}>
+          <View style={styles.cardHead}>
+            <Text style={styles.cardTitle}>妝容 / 保養</Text>
+            <Text style={styles.cardMeta}>
+              已選 {selectedProducts.length} 項 · 都可以留空
+            </Text>
+          </View>
+          <View style={styles.cardBody}>
+            <PhotoCard
+              label="妝容照"
+              hint="拍照 / 相簿"
+              uri={makeupPreview}
+              kind="makeup"
+              width={110}
+              onPick={(camera) => pickPhoto("makeup", camera)}
+              onRemove={() => removePhoto("makeup")}
+            />
+            <View style={styles.productArea}>
+              {selectedProducts.length > 0 ? (
+                <View style={styles.productChips}>
+                  {selectedProducts.map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.productChip}
+                      onPress={() => toggleProduct(item.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.productChipText} numberOfLines={1}>
+                        {item.name || CATEGORY_LABEL[item.category] || "品項"}
+                      </Text>
+                      <Text style={styles.productChipRemove}>×</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+              <TouchableOpacity
+                style={styles.addWide}
+                onPress={() => setProductPicker(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.addWideText}>＋ 新增品項</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
-        {selectedProducts.length > 0 ? (
-          <View style={styles.productChips}>
-            {selectedProducts.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.productChip}
-                onPress={() => toggleProduct(item.id)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.productChipText} numberOfLines={1}>
-                  {item.name || CATEGORY_LABEL[item.category] || "品項"}
-                </Text>
-                <Text style={styles.productChipRemove}>×</Text>
-              </TouchableOpacity>
-            ))}
+        <View style={styles.card}>
+          <View style={styles.publishRow}>
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={styles.cardTitle}>同步發佈到動態</Text>
+              <Text style={styles.cardHint}>
+                用這天的照片發佈，會標「使用{" "}
+                {selected.length + selectedProducts.length} 項產品」
+              </Text>
+            </View>
+            <Switch
+              value={publishOn}
+              onValueChange={setPublish}
+              trackColor={{ false: "#e3e1dc", true: colors.primary }}
+              thumbColor="#ffffff"
+              ios_backgroundColor="#e3e1dc"
+            />
           </View>
-        ) : (
-          <Text style={styles.mutedText}>還沒有選今天用的品項</Text>
-        )}
+          {publishOn ? (
+            <View style={[styles.wrapRow, { marginTop: 10 }]}>
+              {CONTENT_TYPE_OPTIONS.filter((option) =>
+                ["outfit", "makeup", "skincare"].includes(option.key)
+              ).map((option) => {
+                const active = contentTypes.includes(option.key);
+                return (
+                  <TouchableOpacity
+                    key={option.key}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => toggleContentType(option.key)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[styles.chipText, active && styles.chipTextActive]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
 
         <TouchableOpacity
-          style={styles.chooseProducts}
-          onPress={() => setProductPicker(true)}
-          activeOpacity={0.85}
+          style={styles.moreToggle}
+          onPress={() => setShowMore((value) => !value)}
+          activeOpacity={0.7}
         >
-          <Text style={styles.chooseProductsText}>＋ 選擇今天用了什麼</Text>
+          <Text style={styles.moreToggleText}>
+            {showMore ? "收起更多設定" : "更多設定"}
+          </Text>
         </TouchableOpacity>
 
-        <Text style={styles.sectionTitle}>Look 資訊</Text>
+        {showMore ? (
+          <>
+            <Text style={styles.sectionTitle}>排版模式</Text>
+            <Text style={styles.sectionHint}>
+              快速列表最省事；想做成拼貼就用畫布，拖曳喜歡的位置
+            </Text>
+            <View style={styles.modeTabs}>
+              {[
+                { key: false, label: "快速列表" },
+                { key: true, label: "畫布拼貼" },
+              ].map((tab) => {
+                const active = canvasMode === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.label}
+                    style={[styles.modeTab, active && styles.modeTabActive]}
+                    onPress={() => switchCanvasMode(tab.key)}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[styles.modeText, active && styles.modeTextActive]}
+                    >
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {canvasMode ? (
+              selectedItems.length === 0 ? (
+                <View style={styles.canvasEmpty}>
+                  <Text style={styles.canvasEmptyEmoji}>🎨</Text>
+                  <Text style={styles.canvasEmptyText}>
+                    先從「新增單品」挑幾件{"\n"}畫布會自動幫你排好位置
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <OutfitCanvas
+                    items={selectedItems}
+                    transforms={canvasTransforms}
+                    size={canvasSize}
+                    editable
+                    selectedId={canvasSelected}
+                    onSelect={setCanvasSelected}
+                    onTransform={updateCanvasTransform}
+                  />
+                  <Text style={styles.canvasHint}>
+                    直接拖曳單品移動；點選後可用下方按鈕縮放、旋轉與調整圖層
+                  </Text>
+                  {canvasItem ? (
+                    <View style={styles.canvasTools}>
+                      <View style={styles.canvasToolHead}>
+                        <Text style={styles.canvasToolName} numberOfLines={1}>
+                          {canvasItem.name || "未命名單品"}
+                        </Text>
+                        <Text style={styles.canvasToolMeta}>已選取</Text>
+                      </View>
+                      <View style={styles.toolRow}>
+                        <CanvasToolButton
+                          label="縮小"
+                          onPress={() => nudgeScale(-0.1)}
+                        />
+                        <CanvasToolButton
+                          label="放大"
+                          onPress={() => nudgeScale(0.1)}
+                        />
+                        <CanvasToolButton
+                          label="左轉"
+                          onPress={() => nudgeRotation(-15)}
+                        />
+                        <CanvasToolButton
+                          label="右轉"
+                          onPress={() => nudgeRotation(15)}
+                        />
+                        <CanvasToolButton
+                          label="上層"
+                          onPress={() => layerCanvasItem("up")}
+                        />
+                        <CanvasToolButton
+                          label="下層"
+                          onPress={() => layerCanvasItem("down")}
+                        />
+                        <CanvasToolButton
+                          label="重設"
+                          onPress={resetCanvasItem}
+                        />
+                        <CanvasToolButton
+                          label="移除"
+                          onPress={removeCanvasItem}
+                        />
+                      </View>
+                    </View>
+                  ) : (
+                    <Text style={styles.canvasHint}>
+                      點一下畫布上的單品，就能調整大小、角度與圖層
+                    </Text>
+                  )}
+                </>
+              )
+            ) : null}
+
+            <Text style={styles.sectionTitle}>Look 資訊</Text>
         <TextInput
           style={styles.input}
           value={title}
@@ -1193,6 +1194,8 @@ export default function OutfitEditorScreen() {
         <Text style={styles.privacyHint}>
           預設公開；也可以只給追蹤者或只給自己看。
         </Text>
+          </>
+        ) : null}
       </ScrollView>
 
       <View style={styles.footer}>
@@ -1221,7 +1224,9 @@ export default function OutfitEditorScreen() {
               {isFuture
                 ? `排入 ${longDate(dateStr)}`
                 : countable
-                ? "完成這天（+1 次）"
+                ? publishOn
+                  ? "儲存並發佈"
+                  : "儲存這天"
                 : "儲存這天"}
             </Text>
           )}
@@ -1317,12 +1322,267 @@ export default function OutfitEditorScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={itemPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setItemPicker(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setItemPicker(false)}
+        >
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>新增單品</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.modalFilters}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.chip,
+                  roleFilter === "all" && styles.chipActive,
+                ]}
+                onPress={() => setRoleFilter("all")}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    roleFilter === "all" && styles.chipTextActive,
+                  ]}
+                >
+                  全部
+                </Text>
+              </TouchableOpacity>
+              {groups.map((g) => {
+                const active = roleFilter === g.key;
+                return (
+                  <TouchableOpacity
+                    key={g.key}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => setRoleFilter(g.key)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[styles.chipText, active && styles.chipTextActive]}
+                    >
+                      {g.label} {g.items.length}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <ScrollView style={styles.modalList}>
+              {outfitItems.length === 0 ? (
+                <Text style={styles.mutedText}>
+                  衣櫃裡還沒有衣物，先到衣櫃新增
+                </Text>
+              ) : (
+                visibleGroups.map((group) => (
+                  <View key={group.key} style={styles.group}>
+                    <Text style={styles.groupTitle}>{group.label}</Text>
+                    {group.items.map((item) => {
+                      const picked = selected.includes(item.id);
+                      return (
+                        <TouchableOpacity
+                          key={item.id}
+                          style={[
+                            styles.itemRow,
+                            picked && styles.itemRowActive,
+                          ]}
+                          onPress={() => toggle(item.id)}
+                          activeOpacity={0.8}
+                        >
+                          <ItemThumb item={item} size={44} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.itemName} numberOfLines={1}>
+                              {item.name || "未命名"}
+                            </Text>
+                            <Text style={styles.itemMeta} numberOfLines={1}>
+                              {CATEGORY_LABEL[item.category] || item.category}
+                              {item.color ? ` · ${item.color}` : ""}
+                            </Text>
+                          </View>
+                          <View
+                            style={[
+                              styles.check,
+                              picked && styles.checkActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.checkText,
+                                picked && styles.checkTextActive,
+                              ]}
+                            >
+                              {picked ? "✓" : "+"}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.modalDone}
+              onPress={() => setItemPicker(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalDoneText}>
+                完成（已選 {selected.length} 件）
+              </Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={datePicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDatePicker(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setDatePicker(false)}
+        >
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>選擇日期</Text>
+            <View style={styles.datePickRow}>
+              <TouchableOpacity
+                style={styles.dateArrow}
+                onPress={() => shiftDate(-1)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.dateArrowText}>‹</Text>
+              </TouchableOpacity>
+              <View style={{ flex: 1, alignItems: "center" }}>
+                <Text style={styles.dateMain}>{relativeDate(dateStr)}</Text>
+                <Text style={styles.dateSub}>{longDate(dateStr)}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.dateArrow}
+                onPress={() => shiftDate(1)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.dateArrowText}>›</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={styles.modalDone}
+              onPress={() => setDatePicker(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalDoneText}>完成</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
+  dateChips: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  dateChip: {
+    backgroundColor: colors.chip,
+    borderRadius: radius.full,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  dateChipActive: { backgroundColor: colors.primary },
+  dateChipText: { fontSize: 12, fontWeight: "700", color: colors.sub },
+  dateChipTextActive: { color: "#fff" },
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    padding: 14,
+    marginBottom: 12,
+    ...shadow.soft,
+  },
+  cardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+    gap: 8,
+  },
+  cardTitle: { ...type.heading, fontSize: 15, color: colors.text },
+  cardMeta: { fontSize: 10.5, color: colors.faint },
+  cardBody: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  cardHint: {
+    fontSize: 10.5,
+    color: colors.faint,
+    lineHeight: 15,
+    marginTop: 8,
+  },
+  tiles: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    alignContent: "flex-start",
+  },
+  tile: { position: "relative" },
+  tileRemove: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tileRemoveText: { color: "#fff", fontSize: 11, lineHeight: 12 },
+  addTile: {
+    width: 66,
+    height: 66,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.border,
+    backgroundColor: "#faf9f7",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
+  addTilePlus: { fontSize: 18, color: colors.sub, lineHeight: 20 },
+  addTileText: { fontSize: 9, color: colors.sub, fontWeight: "600" },
+  productArea: { flex: 1, gap: 8 },
+  addWide: {
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingVertical: 10,
+    alignItems: "center",
+    backgroundColor: "#faf9f7",
+  },
+  addWideText: { fontSize: 11, fontWeight: "700", color: colors.sub },
+  publishRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  moreToggle: {
+    alignItems: "center",
+    paddingVertical: 10,
+    marginBottom: 4,
+  },
+  moreToggleText: { fontSize: 12, fontWeight: "600", color: colors.faint },
+  datePickRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
   sectionTitle: {
     ...type.heading,
     color: colors.text,
@@ -1372,6 +1632,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   photoEmpty: { alignItems: "center", gap: 5, padding: 8 },
+  photoEmptyLabel: { fontSize: 11, fontWeight: "700", color: colors.text },
   photoEmptyIcon: { fontSize: 26 },
   photoEmptyText: { fontSize: 10, color: colors.faint, textAlign: "center" },
   photoRemove: {

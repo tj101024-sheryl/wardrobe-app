@@ -31,7 +31,7 @@ export default function RootLayout() {
           <Stack.Screen name="upload" options={{ title: "新增項目" }} />
           <Stack.Screen name="item/[id]" options={{ title: "項目資訊" }} />
           <Stack.Screen name="user/[id]" options={{ title: "個人檔案" }} />
-          <Stack.Screen name="outfit/edit" options={{ title: "編輯這天" }} />
+          <Stack.Screen name="outfit/edit" options={{ title: "記錄這天" }} />
           <Stack.Screen name="outfit/[id]" options={{ title: "這天的紀錄" }} />
           <Stack.Screen name="outfits/calendar" options={{ title: "穿搭日曆" }} />
           <Stack.Screen name="outfits/pending" options={{ title: "待確認穿搭" }} />
