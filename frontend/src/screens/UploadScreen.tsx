@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Modal,
+  Pressable,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { File } from "expo-file-system";
@@ -34,6 +36,8 @@ import {
   joinEfficacy,
 } from "../types";
 import { CategoryPicker, EfficacyPicker } from "../components/CategoryPickers";
+import { COLOR_FAMILIES } from "../color";
+import { loadBrandOptions, saveBrandOptions } from "../brands";
 import { colors, radius, shadow, type } from "../theme";
 
 function ChipRow({
@@ -94,6 +98,8 @@ export default function UploadScreen() {
   });
   const [category, setCategory] = useState("");
   const [color, setColor] = useState("");
+  const [colorFamily, setColorFamily] = useState("");
+  const [colorOpen, setColorOpen] = useState(false);
   const [season, setSeason] = useState("");
   const [occasion, setOccasion] = useState("");
   const [weather, setWeather] = useState("");
@@ -103,6 +109,66 @@ export default function UploadScreen() {
   const [showMore, setShowMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [brandOptions, setBrandOptions] = useState<string[]>([
+    ...BRAND_SUGGESTIONS,
+  ]);
+  const [editBrands, setEditBrands] = useState(false);
+  const [brandModal, setBrandModal] = useState(false);
+  const [newBrand, setNewBrand] = useState("");
+
+  useEffect(() => {
+    void loadBrandOptions().then(setBrandOptions);
+  }, []);
+
+  function persistBrands(next: string[]) {
+    setBrandOptions(next);
+    void saveBrandOptions(next);
+  }
+
+  function addBrand() {
+    const value = newBrand.trim();
+    if (!value) return;
+    const exists = brandOptions.some(
+      (option) => option.toUpperCase() === value.toUpperCase()
+    );
+    if (!exists) persistBrands([...brandOptions, value]);
+    setBrand(value);
+    setNewBrand("");
+    setBrandModal(false);
+  }
+
+  function removeBrand(value: string) {
+    const run = () => {
+      persistBrands(brandOptions.filter((option) => option !== value));
+      if (brand.trim().toUpperCase() === value.toUpperCase()) setBrand("");
+    };
+    if (Platform.OS === "web") {
+      if (
+        typeof window !== "undefined" &&
+        window.confirm(`要移除品牌「${value}」嗎？`)
+      ) {
+        run();
+      }
+      return;
+    }
+    Alert.alert("刪除品牌", `要移除「${value}」嗎？`, [
+      { text: "取消", style: "cancel" },
+      { text: "刪除", style: "destructive", onPress: run },
+    ]);
+  }
+
+  function pickColor(key: string, label: string) {
+    if (colorFamily === key) {
+      setColorFamily("");
+      setColor("");
+      return;
+    }
+    setColorFamily(key);
+    setColor(label);
+  }
+
+  const activeColor =
+    COLOR_FAMILIES.find((swatch) => swatch.key === colorFamily) ?? null;
 
   function chooseType(key: string) {
     setItemType(key);
@@ -154,6 +220,8 @@ export default function UploadScreen() {
       form.append("item_type", itemType);
       form.append("category", category);
       form.append("color", color);
+      form.append("color_family", activeColor ? activeColor.key : "");
+      form.append("color_hex", activeColor ? activeColor.hex : "");
       form.append("season", hasClothingFields(itemType) ? season : "");
       form.append("occasion", occasion);
       form.append("weather", hasClothingFields(itemType) ? weather : "");
@@ -262,14 +330,33 @@ export default function UploadScreen() {
           placeholderTextColor={colors.faint}
           autoCapitalize="characters"
         />
+        <View style={styles.brandHead}>
+          <Text style={styles.fieldLabel}>品牌選項</Text>
+          <TouchableOpacity
+            onPress={() => setEditBrands((value) => !value)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.brandEdit}>
+              {editBrands ? "完成" : "編輯"}
+            </Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.brandChips}>
-          {BRAND_SUGGESTIONS.map((suggestion) => {
-            const active = brand.trim().toUpperCase() === suggestion;
+          {brandOptions.map((option) => {
+            const active = brand.trim().toUpperCase() === option.toUpperCase();
             return (
               <TouchableOpacity
-                key={suggestion}
-                style={[styles.brandChip, active && styles.brandChipActive]}
-                onPress={() => setBrand(active ? "" : suggestion)}
+                key={option}
+                style={[
+                  styles.brandChip,
+                  active && styles.brandChipActive,
+                  editBrands && styles.brandChipEditing,
+                ]}
+                onPress={() =>
+                  editBrands
+                    ? removeBrand(option)
+                    : setBrand(active ? "" : option)
+                }
                 activeOpacity={0.8}
               >
                 <Text
@@ -278,19 +365,90 @@ export default function UploadScreen() {
                     active && styles.brandChipTextActive,
                   ]}
                 >
-                  {suggestion}
+                  {option}
                 </Text>
+                {editBrands ? (
+                  <Text
+                    style={[
+                      styles.brandChipRemove,
+                      active && styles.brandChipRemoveActive,
+                    ]}
+                  >
+                    ×
+                  </Text>
+                ) : null}
               </TouchableOpacity>
             );
           })}
+          <TouchableOpacity
+            style={styles.brandAddChip}
+            onPress={() => setBrandModal(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.brandAddText}>＋ 新增</Text>
+          </TouchableOpacity>
         </View>
-        <TextInput
-          style={styles.input}
-          value={color}
-          onChangeText={setColor}
-          placeholder="顏色，例如：白、黑、米"
-          placeholderTextColor={colors.faint}
-        />
+        <View style={styles.colorHead}>
+          <Text style={styles.fieldLabel}>顏色</Text>
+          <Text style={styles.colorHint}>從顏色牆選</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.colorSummary}
+          onPress={() => setColorOpen((value) => !value)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.colorSummaryLeft}>
+            <View
+              style={[
+                styles.colorPreview,
+                {
+                  backgroundColor: activeColor
+                    ? activeColor.hex
+                    : "#e9e7e2",
+                },
+              ]}
+            />
+            <Text style={styles.colorSummaryText}>
+              {activeColor ? `${activeColor.label}色` : "尚未選擇顏色"}
+            </Text>
+          </View>
+          {colorOpen ? (
+            <ChevronUp size={18} color={colors.sub} />
+          ) : (
+            <ChevronDown size={18} color={colors.sub} />
+          )}
+        </TouchableOpacity>
+        {colorOpen ? (
+          <View style={styles.swatchGrid}>
+            {COLOR_FAMILIES.map((swatch) => {
+              const active = colorFamily === swatch.key;
+              return (
+                <TouchableOpacity
+                  key={swatch.key}
+                  style={styles.swatchItem}
+                  onPress={() => pickColor(swatch.key, swatch.label)}
+                  activeOpacity={0.8}
+                >
+                  <View
+                    style={[
+                      styles.swatchCircle,
+                      { backgroundColor: swatch.hex },
+                      active && styles.swatchCircleActive,
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.swatchLabel,
+                      active && styles.swatchLabelActive,
+                    ]}
+                  >
+                    {swatch.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : null}
 
         <SectionTitle>種類</SectionTitle>
         <View style={styles.chipRow}>
@@ -415,6 +573,42 @@ export default function UploadScreen() {
           <Text style={styles.saveText}>存入收納</Text>
         )}
       </TouchableOpacity>
+      <Modal
+        visible={brandModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBrandModal(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setBrandModal(false)}
+        >
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>新增品牌</Text>
+            <Text style={styles.modalHint}>
+              輸入品牌名稱，之後就能直接點選。
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={newBrand}
+              onChangeText={setNewBrand}
+              placeholder="例如：UNIQLO"
+              placeholderTextColor={colors.faint}
+              autoCapitalize="characters"
+              autoFocus
+              onSubmitEditing={addBrand}
+            />
+            <TouchableOpacity
+              style={[styles.modalDone, !newBrand.trim() && { opacity: 0.45 }]}
+              onPress={addBrand}
+              disabled={!newBrand.trim()}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalDoneText}>新增</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -503,6 +697,9 @@ const styles = StyleSheet.create({
     marginBottom: 9,
   },
   brandChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
@@ -514,8 +711,105 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
+  brandChipEditing: {
+    borderColor: colors.faint,
+    borderStyle: "dashed",
+  },
   brandChipText: { fontSize: 12, color: colors.text, fontWeight: "600" },
   brandChipTextActive: { color: "#fff" },
+  brandChipRemove: {
+    fontSize: 13,
+    lineHeight: 15,
+    color: colors.danger,
+    fontWeight: "800",
+  },
+  brandChipRemoveActive: { color: "#fff" },
+  brandHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  fieldLabel: { fontSize: 12, fontWeight: "700", color: colors.sub },
+  brandEdit: { fontSize: 11, fontWeight: "700", color: colors.sub },
+  brandAddChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: "dashed",
+    borderRadius: radius.full,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  brandAddText: { fontSize: 12, color: colors.sub, fontWeight: "700" },
+  colorHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  colorHint: { fontSize: 10.5, color: colors.faint },
+  colorSummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginBottom: 8,
+  },
+  colorSummaryLeft: { flexDirection: "row", alignItems: "center", gap: 9 },
+  colorPreview: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  colorSummaryText: { fontSize: 13, fontWeight: "600", color: colors.text },
+  swatchGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 6,
+  },
+  swatchItem: { width: 52, alignItems: "center", gap: 5 },
+  swatchCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  swatchCircleActive: { borderColor: colors.primary },
+  swatchLabel: { fontSize: 10.5, color: colors.sub, fontWeight: "500" },
+  swatchLabelActive: { color: colors.text, fontWeight: "700" },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    padding: 18,
+    ...shadow.raised,
+  },
+  modalTitle: { ...type.heading, color: colors.text },
+  modalHint: { fontSize: 11, color: colors.sub, marginTop: 4 },
+  modalDone: {
+    marginTop: 14,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  modalDoneText: { color: "#fff", fontWeight: "700", fontSize: 14 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     backgroundColor: colors.chip,
