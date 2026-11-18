@@ -1,5 +1,5 @@
-import React from "react";
-import { Tabs, router } from "expo-router";
+import { useState } from "react";
+import { Tabs } from "expo-router";
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import {
   LucideIcon,
@@ -10,6 +10,7 @@ import {
   User,
 } from "lucide-react-native";
 import { colors } from "../../theme";
+import AddSheet from "../../components/AddSheet";
 
 function TabIcon({
   Icon,
@@ -36,8 +37,11 @@ function TabIcon({
 }
 
 export default function TabsLayout() {
+  const [addOpen, setAddOpen] = useState(false);
+
   return (
-    <Tabs
+    <>
+      <Tabs
       screenOptions={{
         headerStyle: { backgroundColor: colors.bg },
         headerShadowVisible: false,
@@ -69,22 +73,24 @@ export default function TabsLayout() {
         name="add"
         options={{
           title: "",
-          tabBarButton: (props) => (
-            <TouchableOpacity
-              {...(props as React.ComponentProps<typeof TouchableOpacity>)}
-              style={tabStyles.fabWrap}
-              activeOpacity={0.85}
-            >
-              <View style={tabStyles.fab}>
-                <Plus size={24} color="#fff" strokeWidth={2.6} />
-              </View>
-            </TouchableOpacity>
-          ),
-        }}
-        listeners={{
-          tabPress: (e) => {
-            e.preventDefault();
-            router.push("/upload");
+          tabBarButton: (props) => {
+            const rest = { ...(props as any) };
+            delete rest.onPress;
+            delete rest.href;
+            return (
+              <TouchableOpacity
+                {...rest}
+                accessibilityRole="button"
+                accessibilityLabel="新增"
+                style={tabStyles.fabWrap}
+                activeOpacity={0.85}
+                onPress={() => setAddOpen(true)}
+              >
+                <View style={tabStyles.fab}>
+                  <Plus size={24} color="#fff" strokeWidth={2.6} />
+                </View>
+              </TouchableOpacity>
+            );
           },
         }}
       />
@@ -107,6 +113,8 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+      <AddSheet visible={addOpen} onClose={() => setAddOpen(false)} />
+    </>
   );
 }
 

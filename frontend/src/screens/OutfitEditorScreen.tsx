@@ -14,6 +14,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { File } from "expo-file-system";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { http, getWithRetry } from "../api";
 import {
@@ -514,15 +515,13 @@ export default function OutfitEditorScreen() {
 
   async function uploadPhoto(uri: string): Promise<string> {
     const filename = uri.split("/").pop() || "photo.jpg";
-    const ext = filename.toLowerCase().split(".").pop() || "jpg";
-    const mime =
-      ext === "png"
-        ? "image/png"
-        : ext === "webp"
-        ? "image/webp"
-        : "image/jpeg";
     const form = new FormData();
-    form.append("file", { uri, name: filename, type: mime } as any);
+    if (Platform.OS === "web") {
+      const blob = await (await fetch(uri)).blob();
+      form.append("file", blob, filename);
+    } else {
+      form.append("file", new File(uri) as any);
+    }
     const res = await http.post<{ path: string }>("/api/uploads", form);
     return res.path;
   }

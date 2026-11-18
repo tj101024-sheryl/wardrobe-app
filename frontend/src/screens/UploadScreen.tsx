@@ -9,9 +9,11 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Platform,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { router } from "expo-router";
+import { File } from "expo-file-system";
+import { router, useLocalSearchParams } from "expo-router";
 import {
   Camera,
   ChevronDown,
@@ -79,10 +81,17 @@ function SectionTitle({ children }: { children: string }) {
 }
 
 export default function UploadScreen() {
+  const params = useLocalSearchParams<{ type?: string }>();
   const [uri, setUri] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
-  const [itemType, setItemType] = useState("clothes");
+  const [itemType, setItemType] = useState(() => {
+    const initial = params.type;
+    return typeof initial === "string" &&
+      ITEM_TYPES.some((t) => t.key === initial)
+      ? initial
+      : "clothes";
+  });
   const [category, setCategory] = useState("");
   const [color, setColor] = useState("");
   const [season, setSeason] = useState("");
@@ -134,8 +143,12 @@ export default function UploadScreen() {
     try {
       const form = new FormData();
       const filename = uri.split("/").pop() || "photo.jpg";
-      const mime = filename.endsWith(".png") ? "image/png" : "image/jpeg";
-      form.append("file", { uri, name: filename, type: mime } as any);
+      if (Platform.OS === "web") {
+        const blob = await (await fetch(uri)).blob();
+        form.append("file", blob, filename);
+      } else {
+        form.append("file", new File(uri) as any);
+      }
       form.append("name", name);
       form.append("brand", brand);
       form.append("item_type", itemType);
