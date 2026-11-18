@@ -119,7 +119,7 @@ export default function OutfitsScreen() {
     if (value === todayStr) return; // 今天由下方 Hero 負責，週條不再重複跳轉
     const outfit = byDate.get(value);
     if (outfit) router.push(`/outfit/${outfit.id}`);
-    else router.push(`/outfit/edit?date=${value}`);
+    else setNotice("這天還沒有紀錄，可從「＋」新增");
   }
 
   async function completeToday() {
@@ -179,7 +179,7 @@ export default function OutfitsScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>我的穿搭</Text>
-          <Text style={styles.sub}>記錄今天的穿搭、妝容與保養，留下好看的一天</Text>
+          <Text style={styles.sub}>回顧每天的穿搭、妝容與保養</Text>
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity
@@ -309,19 +309,6 @@ export default function OutfitsScreen() {
                           >
                             <OutfitPreview outfit={current} size={92} />
                           </TouchableOpacity>
-                          <TouchableOpacity
-                            style={styles.photoChip}
-                            onPress={() =>
-                              router.push(
-                                `/outfit/edit?id=${current.id}&date=${current.date}`
-                              )
-                            }
-                            activeOpacity={0.8}
-                          >
-                            <Text style={styles.photoChipText}>
-                              {current.photo_url ? "📷 換照片" : "📷 照片"}
-                            </Text>
-                          </TouchableOpacity>
                         </View>
                         <TouchableOpacity
                           style={{ flex: 1 }}
@@ -361,26 +348,9 @@ export default function OutfitsScreen() {
                   {current.products.length > 0 ||
                   current.makeup_photo_url ? (
                     <View>
-                      <View style={styles.lookSectionHead}>
-                        <Text style={[styles.lookLabel, { marginBottom: 0 }]}>
-                          妝容與保養
-                        </Text>
-                        <TouchableOpacity
-                          style={styles.photoBtnSmall}
-                          onPress={() =>
-                            router.push(
-                              `/outfit/edit?id=${current.id}&date=${current.date}`
-                            )
-                          }
-                          activeOpacity={0.8}
-                        >
-                          <Text style={styles.photoBtnSmallText}>
-                            {current.makeup_photo_url
-                              ? "📷 換照片"
-                              : "📷 加照片"}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
+                      <Text style={[styles.lookLabel, { marginBottom: 0 }]}>
+                        妝容與保養
+                      </Text>
                       <TouchableOpacity
                         style={styles.makeupRow}
                         onPress={() =>
@@ -447,7 +417,7 @@ export default function OutfitsScreen() {
 
                   {!outfitRecorded(current) ? (
                     <Text style={styles.lookEmpty}>
-                      這天還沒有內容，點「編輯這天」開始記錄
+                      這天還沒有穿搭或妝容內容
                     </Text>
                   ) : null}
                 </View>
@@ -471,57 +441,17 @@ export default function OutfitsScreen() {
                   </TouchableOpacity>
                 ) : null}
 
-                <TouchableOpacity
-                  style={styles.editBtn}
-                  onPress={() =>
-                    router.push(
-                      `/outfit/edit?id=${current.id}&date=${current.date}`
-                    )
-                  }
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.editBtnText}>編輯這天</Text>
-                </TouchableOpacity>
+                {notice ? <Text style={styles.heroNotice}>{notice}</Text> : null}
               </>
             ) : (
-              <>
-                <View style={styles.emptySlots}>
-                  <View style={styles.emptySlot}>
-                    <Text style={styles.emptySlotTitle}>穿搭</Text>
-                    <Text style={styles.emptySlotHint}>照片或單品</Text>
-                  </View>
-                  <View style={styles.emptySlot}>
-                    <Text style={styles.emptySlotTitle}>妝容／保養</Text>
-                    <Text style={styles.emptySlotHint}>照片或品項</Text>
-                  </View>
-                </View>
-                <Text style={styles.emptyLead}>
-                  今天還沒記錄，拍張照或直接挑今天穿了什麼
+              <View style={styles.emptyView}>
+                <Text style={styles.emptyViewText}>今天還沒有紀錄</Text>
+                <Text style={styles.emptyViewHint}>
+                  可從 tab bar 的「＋」新增這天的穿搭或妝容
                 </Text>
-                <TouchableOpacity
-                  style={styles.heroAction}
-                  onPress={() => router.push(`/outfit/edit?date=${todayStr}`)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.heroActionText}>記錄今天</Text>
-                </TouchableOpacity>
-              </>
+              </View>
             )}
-
-            {notice ? <Text style={styles.heroNotice}>{notice}</Text> : null}
           </View>
-
-          <TouchableOpacity
-            style={styles.addOtherBtn}
-            onPress={() => {
-              const tomorrow = new Date();
-              tomorrow.setDate(tomorrow.getDate() + 1);
-              router.push(`/outfit/edit?date=${ymd(tomorrow)}`);
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.addOtherText}>＋ 新增別天穿搭</Text>
-          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.exploreCard}
@@ -916,6 +846,9 @@ const styles = StyleSheet.create({
   },
   emptySlotTitle: { fontSize: 14, fontWeight: "700", color: colors.text },
   emptySlotHint: { fontSize: 10, color: colors.faint },
+  emptyView: { alignItems: "center", paddingVertical: 18, gap: 5 },
+  emptyViewText: { ...type.heading, color: colors.text, fontSize: 14 },
+  emptyViewHint: { fontSize: 11, color: colors.faint },
   emptyLead: {
     fontSize: 11,
     color: colors.sub,
