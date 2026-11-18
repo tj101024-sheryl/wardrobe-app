@@ -150,7 +150,11 @@ function CanvasToolButton({
 }
 
 export default function OutfitEditorScreen() {
-  const params = useLocalSearchParams<{ date?: string; id?: string }>();
+  const params = useLocalSearchParams<{
+    date?: string;
+    id?: string;
+    content?: string;
+  }>();
   const editId = params.id ? Number(params.id) : null;
   const initialDate = params.date || ymd(new Date());
   const { width } = useWindowDimensions();
@@ -162,9 +166,11 @@ export default function OutfitEditorScreen() {
   const [notes, setNotes] = useState("");
   const [occasion, setOccasion] = useState("");
   const [audience, setAudience] = useState("unisex");
-  const [contentTypes, setContentTypes] = useState<OutfitContentType[]>([
-    "outfit",
-  ]);
+  const [contentTypes, setContentTypes] = useState<OutfitContentType[]>(() =>
+    CONTENT_TYPE_OPTIONS.some((option) => option.key === params.content)
+      ? [params.content as OutfitContentType]
+      : ["outfit"]
+  );
   const [styleTags, setStyleTags] = useState<OutfitStyle[]>([]);
   const [level, setLevel] = useState<OutfitLevel>("beginner");
   const [bodyTypes, setBodyTypes] = useState<OutfitBodyType[]>([]);

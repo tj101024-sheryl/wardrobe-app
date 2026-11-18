@@ -14,12 +14,11 @@ import { router } from "expo-router";
 import {
   CalendarHeart,
   ChevronRight,
-  Images,
   Shirt,
-  Sparkles,
+  Video,
 } from "lucide-react-native";
 import { colors, radius, shadow, type } from "../theme";
-import { WEEKDAY_LABELS, weekdayIndex, ymd } from "../date";
+import { ymd } from "../date";
 import { PHONE_MAX_WIDTH } from "./PhoneFrame";
 
 type Props = {
@@ -67,39 +66,22 @@ export default function AddSheet({ visible, onClose }: Props) {
 
   const now = new Date();
   const today = ymd(now);
-  const todayLabel = `${now.getMonth() + 1}/${now.getDate()}（${
-    WEEKDAY_LABELS[weekdayIndex(now)]
-  }）`;
 
   const rows: Row[] = [
     {
       key: "today",
-      title: "記錄今天",
-      subtitle: `${todayLabel} · 穿搭、妝容、保養`,
+      title: "記錄這天",
+      subtitle: "穿搭、妝容 / 保養，記完可一鍵發佈動態",
       Icon: CalendarHeart,
       dark: true,
       href: { pathname: "/outfit/edit", params: { date: today } },
     },
     {
-      key: "clothes",
-      title: "新增衣服 / 配件",
-      subtitle: "拍照、相簿匯入或貼商品連結",
+      key: "item",
+      title: "新增單品",
+      subtitle: "衣服、配件、化妝品、保養品，進去再選種類",
       Icon: Shirt,
-      href: { pathname: "/upload", params: { type: "clothes" } },
-    },
-    {
-      key: "beauty",
-      title: "新增化妝品 / 保養品",
-      subtitle: "只記品牌與品名也可以",
-      Icon: Sparkles,
-      href: { pathname: "/upload", params: { type: "makeup" } },
-    },
-    {
-      key: "post",
-      title: "發佈動態",
-      subtitle: "圖文、影片、教學",
-      Icon: Images,
-      href: { pathname: "/outfit/edit", params: { date: today } },
+      href: { pathname: "/upload" },
     },
   ];
 
@@ -174,6 +156,22 @@ export default function AddSheet({ visible, onClose }: Props) {
                 />
               </TouchableOpacity>
             ))}
+
+            <TouchableOpacity
+              style={styles.moreLink}
+              activeOpacity={0.7}
+              onPress={() =>
+                choose({
+                  pathname: "/outfit/edit",
+                  params: { date: today, content: "tutorial" },
+                })
+              }
+              accessibilityRole="button"
+              accessibilityLabel="另外發佈教學或影片"
+            >
+              <Video size={15} color={colors.sub} strokeWidth={2} />
+              <Text style={styles.moreLinkText}>另外發佈教學 / 影片</Text>
+            </TouchableOpacity>
           </View>
         </Animated.View>
       </View>
@@ -244,4 +242,16 @@ const styles = StyleSheet.create({
     color: colors.sub,
   },
   rowSubDark: { color: "rgba(255,255,255,0.58)" },
+  moreLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+  },
+  moreLinkText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.sub,
+  },
 });
